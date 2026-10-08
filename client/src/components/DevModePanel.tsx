@@ -1,0 +1,199 @@
+import React, { useState } from 'react';
+import { RoomState } from '@shared/types';
+import { socket } from '../socket';
+import { SOCKET_EVENTS } from '@shared/events';
+import { CHAOS_EVENTS, MINIGAME_META_LIST } from '@shared/constants';
+import { Wrench, UserPlus, Play, Sparkles, X, ChevronDown } from 'lucide-react';
+
+interface DevModePanelProps {
+  room: RoomState;
+}
+
+export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedMinigame, setSelectedMinigame] = useState<string>('reaction-rush');
+  const [selectedEvent, setSelectedEvent] = useState<string>('coin_storm');
+
+  const addBot = () => {
+    socket.emit(SOCKET_EVENTS.ADD_BOT, { roomCode: room.roomCode });
+  };
+
+  const addFourBots = () => {
+    for (let i = 0; i < 4; i++) {
+      setTimeout(() => {
+        socket.emit(SOCKET_EVENTS.ADD_BOT, { roomCode: room.roomCode });
+      }, i * 150);
+    }
+  };
+
+  const launchMinigame = () => {
+    socket.emit(SOCKET_EVENTS.DEV_SELECT_MINIGAME, {
+      roomCode: room.roomCode,
+      minigameId: selectedMinigame
+    });
+  };
+
+  const triggerEvent = () => {
+    socket.emit(SOCKET_EVENTS.DEV_TRIGGER_EVENT, {
+      roomCode: room.roomCode,
+      eventId: selectedEvent
+    });
+  };
+
+  const modifyPlayer = (playerId: string, deltaCoins: number, deltaCrowns: number) => {
+    const player = room.players[playerId];
+    if (!player) return;
+    socket.emit(SOCKET_EVENTS.DEV_MODIFY_PLAYER, {
+      roomCode: room.roomCode,
+      playerId,
+      coins: Math.max(0, player.coins + deltaCoins),
+      crowns: Math.max(0, player.crowns + deltaCrowns)
+    });
+  };
+
+  if (!isOpen) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        className="fixed bottom-4 right-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-2 border-2 border-amber-300 z-50 transition-transform active:scale-95"
+      >
+        <Wrench className="w-5 h-5" />
+        <span>DEV MODE</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed inset-y-0 right-0 w-96 bg-slate-900/95 backdrop-blur-2xl border-l border-slate-700/80 p-5 shadow-2xl z-50 overflow-y-auto flex flex-col gap-4 text-slate-100">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2 text-amber-400 font-black text-lg">
+          <Wrench className="w-5 h-5" />
+          <span>DEV CONTROLS</span>
+        </div>
+        <button
+          onClick={() => setIsOpen(false)}
+          className="p-1 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white"
+        >
+          <X className="w-6 h-6" />
+        </button>
+      </div>
+
+      {/* Bot Controls */}
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Bot Játékosok</label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={addBot}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs"
+          >
+            <UserPlus className="w-4 h-4" />
+            +1 Bot
+          </button>
+          <button
+            onClick={addFourBots}
+            className="bg-indigo-700 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs"
+          >
+            <UserPlus className="w-4 h-4" />
+            +4 Bot (5P)
+          </button>
+        </div>
+        <button
+          onClick={() => {
+            socket.emit(SOCKET_EVENTS.RESTART_GAME, { roomCode: room.roomCode });
+          }}
+          className="bg-red-800 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs mt-1"
+        >
+          🔄 Meccs Visszaállítása (Reset Lobby)
+        </button>
+      </div>
+
+      {/* Direct Minigame Launcher */}
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Minijáték Indítása</label>
+        <select
+          value={selectedMinigame}
+          onChange={(e) => setSelectedMinigame(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-400"
+        >
+          {MINIGAME_META_LIST.map((mg) => (
+            <option key={mg.id} value={mg.id}>
+              {mg.name}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={launchMinigame}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs shadow-md"
+        >
+          <Play className="w-4 h-4" />
+          Minijáték Indítása Most
+        </button>
+      </div>
+
+      {/* Trigger Random Event */}
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Kaotikus Esemény</label>
+        <select
+          value={selectedEvent}
+          onChange={(e) => setSelectedEvent(e.target.value)}
+          className="bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-400"
+        >
+          {CHAOS_EVENTS.map((evt) => (
+            <option key={evt.id} value={evt.id}>
+              {evt.icon} {evt.name}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={triggerEvent}
+          className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs shadow-md"
+        >
+          <Sparkles className="w-4 h-4" />
+          Esemény Kiváltása
+        </button>
+      </div>
+
+      {/* Player Stats Live Editor */}
+      <div className="flex flex-col gap-2 border-t border-slate-800 pt-3">
+        <label className="text-xs font-black uppercase tracking-wider text-slate-400">Játékosok Statisztikái</label>
+        <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pr-1">
+          {Object.values(room.players).map((p) => (
+            <div key={p.id} className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700 flex flex-col gap-1.5 text-xs">
+              <div className="flex items-center justify-between font-bold">
+                <span className="truncate">{p.name}</span>
+                <span className="text-slate-400">🪙 {p.coins} | 👑 {p.crowns}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                <button
+                  onClick={() => modifyPlayer(p.id, 5, 0)}
+                  className="bg-slate-700 hover:bg-slate-600 text-amber-300 font-bold py-1 rounded"
+                >
+                  +5 🪙
+                </button>
+                <button
+                  onClick={() => modifyPlayer(p.id, -5, 0)}
+                  className="bg-slate-700 hover:bg-slate-600 text-red-300 font-bold py-1 rounded"
+                >
+                  -5 🪙
+                </button>
+                <button
+                  onClick={() => modifyPlayer(p.id, 0, 1)}
+                  className="bg-amber-600 hover:bg-amber-500 text-white font-bold py-1 rounded"
+                >
+                  +1 👑
+                </button>
+                <button
+                  onClick={() => modifyPlayer(p.id, 0, -1)}
+                  className="bg-red-800 hover:bg-red-700 text-white font-bold py-1 rounded"
+                >
+                  -1 👑
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
