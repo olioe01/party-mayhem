@@ -6,6 +6,7 @@ import { FruitFrenzy2DHost } from './fruitFrenzy/FruitFrenzy2DHost';
 import { BombDodge2DHost } from './bombDodge/BombDodge2DHost';
 import { CoinScramble2DHost } from './coinScramble/CoinScramble2DHost';
 import { TreasureGrab2DHost } from './treasureGrab/TreasureGrab2DHost';
+import { PaintPanic2DHost } from './paintPanic/PaintPanic2DHost';
 import { AlertTriangle } from 'lucide-react';
 
 interface MinigameHostRendererProps {
@@ -38,11 +39,15 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
     return <TreasureGrab2DHost room={room} />;
   }
 
+  // 5. PAINT PANIC: 2D Top-Down Territory Painter
+  if (mg.id === 'paint-panic') {
+    return <PaintPanic2DHost room={room} />;
+  }
+
   // 3D Arena minigames with gamepad controls
   if (
     mg.id === 'push-arena' ||
     mg.id === 'crown-chase' ||
-    mg.id === 'paint-panic' ||
     mg.id === 'controller-test'
   ) {
     return <HostArena3D room={room} />;
