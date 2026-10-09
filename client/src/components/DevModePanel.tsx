@@ -115,11 +115,59 @@ export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
             +5 Bot
           </button>
         </div>
+        {/* Quick Acceptance Test Presets */}
+        <div className="flex flex-col gap-1.5 mt-1 border-t border-slate-800 pt-2">
+          <span className="text-[10px] font-black uppercase text-amber-400">🍎 Fruit Frenzy Gyors Teszt</span>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => {
+                // Ensure 4 bots added, then launch Fruit Frenzy
+                const curCount = Object.keys(room.players).length;
+                const needed = Math.max(0, 5 - curCount);
+                for (let i = 0; i < needed; i++) {
+                  setTimeout(() => {
+                    socket.emit(SOCKET_EVENTS.ADD_BOT, { roomCode: room.roomCode });
+                  }, i * 100);
+                }
+                setTimeout(() => {
+                  socket.emit(SOCKET_EVENTS.DEV_SELECT_MINIGAME, {
+                    roomCode: room.roomCode,
+                    minigameId: 'fruit-frenzy'
+                  });
+                }, (needed + 1) * 120);
+              }}
+              className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-black py-2 px-2 rounded-xl text-[11px] flex items-center justify-center gap-1 shadow"
+            >
+              🍎 1 Ember + 4 Bot
+            </button>
+            <button
+              onClick={() => {
+                const curCount = Object.keys(room.players).length;
+                const needed = Math.max(0, 5 - curCount);
+                for (let i = 0; i < needed; i++) {
+                  setTimeout(() => {
+                    socket.emit(SOCKET_EVENTS.ADD_BOT, { roomCode: room.roomCode });
+                  }, i * 100);
+                }
+                setTimeout(() => {
+                  socket.emit(SOCKET_EVENTS.DEV_SELECT_MINIGAME, {
+                    roomCode: room.roomCode,
+                    minigameId: 'fruit-frenzy'
+                  });
+                }, (needed + 1) * 120);
+              }}
+              className="bg-purple-800 hover:bg-purple-700 text-white font-black py-2 px-2 rounded-xl text-[11px] flex items-center justify-center gap-1 shadow"
+            >
+              🤖 5 Bot Szimuláció
+            </button>
+          </div>
+        </div>
+
         <button
           onClick={() => {
             socket.emit(SOCKET_EVENTS.RESTART_GAME, { roomCode: room.roomCode });
           }}
-          className="bg-red-800 hover:bg-red-700 text-white font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs mt-1"
+          className="bg-red-900/80 hover:bg-red-800 text-white font-bold py-1.5 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs mt-1"
         >
           🔄 Meccs Visszaállítása (Reset Lobby)
         </button>

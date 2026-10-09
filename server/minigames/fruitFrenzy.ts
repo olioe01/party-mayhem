@@ -1,29 +1,40 @@
 import { RoomState, MinigameResultEntry } from '../../shared/types';
 import { MinigameDefinition } from './types';
 import { MINIGAME_COIN_REWARDS } from '../../shared/constants';
-import {
-  ArenaPlayerSim,
-  ArenaBounds,
-  updatePlayerMovement,
-  generateBotSteering,
-} from './arenaUtils';
 
-export interface FallingFruitItem {
+export interface FruitFrenzyItem {
   id: number;
-  type: 'apple' | 'orange' | 'banana' | 'strawberry' | 'watermelon' | 'golden' | 'star' | 'bomb';
+  type: 'apple' | 'orange' | 'banana' | 'strawberry' | 'golden' | 'star' | 'bomb';
   x: number;
   y: number;
-  z: number;
   speed: number;
   points: number;
 }
 
-const ARENA_BOUNDS: ArenaBounds = {
-  minX: -6.5,
-  maxX: 6.5,
-  minZ: -4.5,
-  maxZ: 4.5,
-};
+export interface FruitFrenzyPlayerSim {
+  id: string;
+  name: string;
+  color: string;
+  isBot: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  facing: number; // -1: left, 0: idle, 1: right
+  speed: number;
+  score: number;
+  isHit: boolean;
+  hitTimer: number;
+  basketWidth: number;
+  basketHeight: number;
+  lastInput?: {
+    up?: boolean;
+    down?: boolean;
+    left?: boolean;
+    right?: boolean;
+    a?: boolean;
+    b?: boolean;
+  };
+}
 
 let nextItemId = 1;
 
@@ -32,39 +43,47 @@ export const fruitFrenzyMinigame: MinigameDefinition = {
   name: 'FRUIT FRENZY',
   description: 'Kapd el a hulló finom gyümölcsöket a kosárral, és kerüld el a bombákat!',
   duration: 45,
-  instructions: 'MOZGÁS A D-PADDAL! Alma/narancs: +1 🍎, Arany: +3 🌟, Ritka: +5 💎! BOMBA: -3 pont! 💣',
+  instructions: 'D-PAD BAL/JOBB = MOZGÁS! Alma/narancs: +1 🍎, Arany: +3 🌟, Csillag: +5 💎! BOMBA: -3 pont! 💣',
   controllerConfig: {
     layout: 'gamepad',
-    aHidden: true,
-    bHidden: true,
-    instructions: 'D-PAD = MOZGÁS',
+    aLabel: '—',
+    bLabel: '—',
+    aHidden: false, // Keep visible on controller surface for consistency
+    bHidden: false,
+    instructions: 'D-PAD BAL / JOBB = MOZGÁS',
   },
 
   setup(room: RoomState) {
     const playersList = Object.values(room.players);
     const total = playersList.length;
 
-    const simPlayers: Record<string, ArenaPlayerSim> = {};
+    const simPlayers: Record<string, FruitFrenzyPlayerSim> = {};
     const scores: Record<string, number> = {};
 
+    // Spread players horizontally across ground (Y = 920 on 1920x1080 canvas)
+    const playMinX = 260;
+    const playMaxX = 1660;
+
     playersList.forEach((p, idx) => {
-      // Line up players nicely on the arena floor
-      const spreadX = total > 1 ? ((idx - (total - 1) / 2) / (total - 1)) * 9.0 : 0;
+      const spreadX = total > 1
+        ? playMinX + (idx / (total - 1)) * (playMaxX - playMinX)
+        : 960;
+
       simPlayers[p.id] = {
         id: p.id,
         name: p.name,
         color: p.color || '#3b82f6',
         isBot: Boolean(p.isBot),
         x: spreadX,
-        z: 1.5,
+        y: 920,
         vx: 0,
-        vz: 0,
         facing: 0,
-        speed: 5.6,
-        radius: 0.55,
+        speed: 560, // pixels per second
         score: 0,
         isHit: false,
         hitTimer: 0,
+        basketWidth: 110,
+        basketHeight: 50,
       };
       scores[p.id] = 0;
     });
@@ -72,16 +91,17 @@ export const fruitFrenzyMinigame: MinigameDefinition = {
     room.activeMinigame!.data = {
       players: simPlayers,
       scores,
-      items: [] as FallingFruitItem[],
-      catchEvents: [] as { playerId: string; points: number; type: string; timestamp: number }[],
-      spawnTimer: 0,
-      difficulty: 1.0,
+      items: [] as FruitFrenzyItem[],
+      catchEvents: [] as { playerId: string; points: number; type: string; x: number; y: number; timestamp: number }[],
+      spawnTimer: 0.1,
+      matchProgress: 0,
     };
   },
 
   start(room: RoomState) {
     if (!room.activeMinigame?.data) return;
     room.activeMinigame.data.items = [];
+    room.activeMinigame.data.catchEvents = [];
     room.activeMinigame.data.spawnTimer = 0.2;
   },
 
@@ -107,20 +127,22 @@ export const fruitFrenzyMinigame: MinigameDefinition = {
     if (!mgData) return false;
 
     const timeRemaining = room.activeMinigame!.timeRemaining;
-    const progress = Math.max(0, 1 - timeRemaining / 45); // 0 at start, 1 at end
+    const totalDuration = 45;
+    const progress = Math.min(1, Math.max(0, 1 - timeRemaining / totalDuration)); // 0 to 1
+    mgData.matchProgress = progress;
 
-    // Difficulty ramp: items fall faster and spawn more frequently
-    const fallSpeedBase = 3.8 + progress * 3.5;
-    const spawnInterval = Math.max(0.28, 0.75 - progress * 0.45);
-    const bombChance = 0.12 + progress * 0.16;
+    // Difficulty curve
+    const fallSpeedBase = 340 + progress * 240; // 340 -> 580 px/sec
+    const spawnInterval = Math.max(0.28, 0.65 - progress * 0.32);
+    const bombChance = 0.12 + progress * 0.15; // 12% -> 27%
 
-    // 1. Spawning falling fruit & bombs
+    // 1. Spawning falling items
     mgData.spawnTimer = (mgData.spawnTimer || 0) + dt;
     if (mgData.spawnTimer >= spawnInterval) {
       mgData.spawnTimer = 0;
 
       const isBomb = Math.random() < bombChance;
-      let type: FallingFruitItem['type'] = 'apple';
+      let type: FruitFrenzyItem['type'] = 'apple';
       let points = 1;
 
       if (isBomb) {
@@ -128,130 +150,168 @@ export const fruitFrenzyMinigame: MinigameDefinition = {
         points = -3;
       } else {
         const rand = Math.random();
-        if (rand < 0.06) {
+        if (rand < 0.07) {
           type = 'star';
           points = 5;
-        } else if (rand < 0.22) {
+        } else if (rand < 0.24) {
           type = 'golden';
           points = 3;
         } else {
-          const fruits: FallingFruitItem['type'][] = ['apple', 'orange', 'banana', 'strawberry', 'watermelon'];
+          const fruits: FruitFrenzyItem['type'][] = ['apple', 'orange', 'banana', 'strawberry'];
           type = fruits[Math.floor(Math.random() * fruits.length)];
           points = 1;
         }
       }
 
-      const spawnX = (Math.random() - 0.5) * 11.5;
-      const spawnZ = (Math.random() - 0.5) * 7.5;
-      const speed = fallSpeedBase * (0.9 + Math.random() * 0.25);
+      // Spawn across screen width [160, 1760]
+      const spawnX = 160 + Math.random() * 1600;
+      const speed = fallSpeedBase * (0.88 + Math.random() * 0.24);
 
       mgData.items.push({
         id: nextItemId++,
         type,
         x: spawnX,
-        y: 8.5 + Math.random() * 1.5,
-        z: spawnZ,
+        y: -40,
         speed,
         points,
       });
     }
 
-    // 2. Update player movement & bot AI
-    Object.values(mgData.players as Record<string, ArenaPlayerSim>).forEach((playerSim: any) => {
-      let input = playerSim.lastInput;
+    // 2. Update players & Bot AI
+    const playersMap = mgData.players as Record<string, FruitFrenzyPlayerSim>;
+    Object.values(playersMap).forEach(sim => {
+      // Hit flash decay
+      if (sim.isHit) {
+        sim.hitTimer -= dt;
+        if (sim.hitTimer <= 0) {
+          sim.isHit = false;
+        }
+      }
 
-      if (playerSim.isBot) {
-        // Bot AI: Find target fruit and avoid nearest bomb
-        let bestTarget: FallingFruitItem | null = null;
-        let bestDist = 999;
-        let nearestBomb: FallingFruitItem | null = null;
-        let bombDist = 999;
+      let input = sim.lastInput || {};
 
-        mgData.items.forEach((item: FallingFruitItem) => {
-          const d = Math.hypot(item.x - playerSim.x, item.z - playerSim.z);
+      // Smart Bot AI: Seek nearest high-scoring fruit, dodge falling bombs
+      if (sim.isBot) {
+        let bestTarget: FruitFrenzyItem | null = null;
+        let bestScoreDist = 9999;
+        let threatBomb: FruitFrenzyItem | null = null;
+        let bombDist = 9999;
+
+        mgData.items.forEach((item: FruitFrenzyItem) => {
+          const dx = item.x - sim.x;
+          const dist = Math.abs(dx);
+          const timeToLand = (sim.y - item.y) / item.speed;
+
+          // Bomb evasion: if bomb will land near bot's basket within 1.5s
           if (item.type === 'bomb') {
-            if (item.y < 4.5 && d < bombDist) {
-              bombDist = d;
-              nearestBomb = item;
+            if (dist < 140 && item.y > 400 && dist < bombDist) {
+              threatBomb = item;
+              bombDist = dist;
             }
           } else {
-            // Prioritize higher value fruits
-            const weight = item.points >= 3 ? 0.6 : 1.0;
-            const scoreDist = d * weight;
-            if (item.y > 0.4 && item.y < 7.0 && scoreDist < bestDist) {
-              bestDist = scoreDist;
-              bestTarget = item;
+            // Fruit attraction: evaluate time and reward
+            if (item.y > 50 && item.y < 900 && timeToLand > 0.1 && timeToLand < 2.5) {
+              const weight = item.points === 5 ? 0.35 : item.points === 3 ? 0.55 : 1.0;
+              const effectiveDist = dist * weight;
+              if (effectiveDist < bestScoreDist) {
+                bestScoreDist = effectiveDist;
+                bestTarget = item;
+              }
             }
           }
         });
 
-        const targetX = bestTarget ? bestTarget.x : playerSim.x;
-        const targetZ = bestTarget ? bestTarget.z : playerSim.z;
-        const avoidX = nearestBomb && bombDist < 2.5 ? nearestBomb.x : undefined;
-        const avoidZ = nearestBomb && bombDist < 2.5 ? nearestBomb.z : undefined;
-
-        input = generateBotSteering(playerSim, targetX, targetZ, avoidX, avoidZ, 2.2);
+        // If bomb is dangerously close, dodge away
+        if (threatBomb) {
+          const bombDx = (threatBomb as FruitFrenzyItem).x - sim.x;
+          input = {
+            left: bombDx > 0, // flee left if bomb is to the right
+            right: bombDx <= 0, // flee right if bomb is to the left
+          };
+        } else if (bestTarget) {
+          const targetDx = (bestTarget as FruitFrenzyItem).x - sim.x;
+          input = {
+            left: targetDx < -20,
+            right: targetDx > 20,
+          };
+        } else {
+          input = {};
+        }
       }
 
-      updatePlayerMovement(playerSim, input, dt, ARENA_BOUNDS);
+      // Compute horizontal velocity
+      if (input.right && !input.left) {
+        sim.vx = sim.speed;
+        sim.facing = 1;
+      } else if (input.left && !input.right) {
+        sim.vx = -sim.speed;
+        sim.facing = -1;
+      } else {
+        sim.vx = 0;
+        // Keep facing direction for animation
+      }
+
+      // Move player and clamp within stage borders [140, 1780]
+      sim.x += sim.vx * dt;
+      if (sim.x < 140) sim.x = 140;
+      if (sim.x > 1780) sim.x = 1780;
     });
 
-    // 3. Update falling items and handle basket catching collisions
-    const remainingItems: FallingFruitItem[] = [];
-    const catchRadius = 0.95; // basket catch radius
+    // 3. Update falling items and handle basket catches
+    const remainingItems: FruitFrenzyItem[] = [];
 
-    mgData.items.forEach((item: FallingFruitItem) => {
-      item.y -= item.speed * dt;
+    mgData.items.forEach((item: FruitFrenzyItem) => {
+      item.y += item.speed * dt;
 
-      // When fruit is in the catch plane (y between -0.2 and 1.1)
-      if (item.y <= 1.05 && item.y >= -0.25) {
-        let caughtByPlayerId: string | null = null;
+      // Basket catch zone (Y between 860 and 945)
+      if (item.y >= 860 && item.y <= 945) {
+        let caughtPlayer: FruitFrenzyPlayerSim | null = null;
 
-        for (const sim of Object.values(mgData.players as Record<string, ArenaPlayerSim>)) {
-          const dist = Math.hypot(item.x - sim.x, item.z - sim.z);
-          if (dist <= catchRadius) {
-            caughtByPlayerId = sim.id;
+        for (const sim of Object.values(playersMap)) {
+          const halfW = sim.basketWidth / 2 + 15; // friendly catch hitbox
+          if (Math.abs(item.x - sim.x) <= halfW) {
+            caughtPlayer = sim;
             break;
           }
         }
 
-        if (caughtByPlayerId) {
-          const playerSim = mgData.players[caughtByPlayerId];
+        if (caughtPlayer) {
           if (item.type === 'bomb') {
-            // Bomb hit! -3 points (score = max(0, score - 3))
-            playerSim.score = Math.max(0, playerSim.score - 3);
-            playerSim.isHit = true;
-            playerSim.hitTimer = 0.6;
+            // Bomb penalty: score = max(0, score - 3)
+            caughtPlayer.score = Math.max(0, caughtPlayer.score - 3);
+            caughtPlayer.isHit = true;
+            caughtPlayer.hitTimer = 0.6;
           } else {
-            // Catch fruit!
-            playerSim.score += item.points;
+            // Fruit bonus
+            caughtPlayer.score += item.points;
           }
 
-          mgData.scores[caughtByPlayerId] = playerSim.score;
+          mgData.scores[caughtPlayer.id] = caughtPlayer.score;
           mgData.catchEvents.push({
-            playerId: caughtByPlayerId,
+            playerId: caughtPlayer.id,
             points: item.points,
             type: item.type,
+            x: item.x,
+            y: item.y,
             timestamp: Date.now(),
           });
-          // Caught item is removed
-          return;
+          return; // Item caught and removed
         }
       }
 
-      // If item fell past ground without being caught, remove it
-      if (item.y > -0.3) {
+      // If fallen past floor (Y > 1040), remove it
+      if (item.y <= 1040) {
         remainingItems.push(item);
       }
     });
 
     mgData.items = remainingItems;
 
-    // Prune old catch events older than 1.5s
+    // Prune catch events older than 1.5 seconds
     const now = Date.now();
     mgData.catchEvents = (mgData.catchEvents || []).filter((e: any) => now - e.timestamp < 1500);
 
-    return false; // run until time expires
+    return false; // Run until duration expires
   },
 
   calculateResults(room: RoomState): MinigameResultEntry[] {
@@ -260,7 +320,7 @@ export const fruitFrenzyMinigame: MinigameDefinition = {
     const results = Object.keys(room.players).map(pId => ({
       playerId: pId,
       score: scores[pId] || 0,
-      extraInfo: `${scores[pId] || 0} db gyümölcs összegyűjtve`,
+      extraInfo: `${scores[pId] || 0} pont összegyűjtve`,
     }));
 
     results.sort((a, b) => b.score - a.score);

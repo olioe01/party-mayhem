@@ -323,7 +323,7 @@ export const HostMinigame: React.FC<HostMinigameProps> = ({ room }) => {
         </div>
 
         {/* Minigame Arena */}
-        <div className="flex-1 min-h-0 relative my-4 bg-slate-900/60 rounded-3xl border border-slate-800 shadow-2xl p-6 backdrop-blur-md overflow-hidden">
+        <div className="flex-1 min-h-0 relative my-2 bg-slate-900/60 rounded-3xl border border-slate-800 shadow-2xl p-2 sm:p-4 backdrop-blur-md overflow-hidden">
           <MinigameHostRenderer room={room} />
         </div>
       </div>
