@@ -5,6 +5,7 @@ import { HostArena3D } from '../host/3d/arena/HostArena3D';
 import { FruitFrenzy2DHost } from './fruitFrenzy/FruitFrenzy2DHost';
 import { FruitFrenzy3DHost } from './fruitFrenzy/FruitFrenzy3DHost';
 import { BombDodge2DHost } from './bombDodge/BombDodge2DHost';
+import { BombDodge3DHost } from './bombDodge/BombDodge3DHost';
 import { CoinScramble2DHost } from './coinScramble/CoinScramble2DHost';
 import { TreasureGrab2DHost } from './treasureGrab/TreasureGrab2DHost';
 import { PaintPanic2DHost } from './paintPanic/PaintPanic2DHost';
@@ -24,7 +25,7 @@ interface MinigameHostRendererProps {
 export const MINIGAME_3D_STATUS: Record<string, { ready: boolean; name: string }> = {
   'controller-test': { ready: true, name: 'Controller Test Arena 3D' },
   'fruit-frenzy': { ready: true, name: 'Fruit Frenzy 3D' },
-  'bomb-dodge': { ready: false, name: 'Bomb Dodge 3D' },
+  'bomb-dodge': { ready: true, name: 'Bomb Dodge 3D' },
   'coin-scramble': { ready: false, name: 'Coin Scramble 3D' },
   'treasure-grab': { ready: false, name: 'Treasure Grab 3D' },
   'paint-panic': { ready: false, name: 'Paint Panic 3D' },
@@ -81,8 +82,18 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
       return <FruitFrenzy2DHost room={room} />;
     }
 
-    // 2. BOMB DODGE: 2D Top-Down Arena Renderer
+    // 2. BOMB DODGE: 2D Top-Down Arena vs 3D Three.js Renderer
     if (mg.id === 'bomb-dodge') {
+      if (shouldRender3D('bomb-dodge', graphicsMode)) {
+        return (
+          <ThreeDErrorBoundary
+            minigameId="bomb-dodge"
+            fallback={<BombDodge2DHost room={room} />}
+          >
+            <BombDodge3DHost room={room} />
+          </ThreeDErrorBoundary>
+        );
+      }
       return <BombDodge2DHost room={room} />;
     }
 
