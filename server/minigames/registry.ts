@@ -1,6 +1,12 @@
 import { RoomState, MinigameResultEntry } from '../../shared/types';
 import { MinigameDefinition } from './types';
 import { MINIGAME_COIN_REWARDS } from '../../shared/constants';
+import { fruitFrenzyMinigame } from './fruitFrenzy';
+import { bombDodgeMinigame } from './bombDodge';
+import { pushArenaMinigame } from './pushArena';
+import { crownChaseMinigame } from './crownChase';
+import { paintPanicMinigame } from './paintPanic';
+import { controllerTestMinigame } from './controllerTest';
 
 // Helper to assign ranks and coin rewards based on score descending
 function assignResultsFromScores(
@@ -31,6 +37,14 @@ function assignResultsFromScores(
 }
 
 export const MINIGAMES: Record<string, MinigameDefinition> = {
+  // CORE ARENA GAMEPAD MINIGAMES
+  'fruit-frenzy': fruitFrenzyMinigame,
+  'bomb-dodge': bombDodgeMinigame,
+  'push-arena': pushArenaMinigame,
+  'crown-chase': crownChaseMinigame,
+  'paint-panic': paintPanicMinigame,
+  'controller-test': controllerTestMinigame,
+
   // 1. REACTION RUSH
   'reaction-rush': {
     id: 'reaction-rush',

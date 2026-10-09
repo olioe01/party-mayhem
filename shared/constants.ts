@@ -338,6 +338,12 @@ export interface MinigameMeta {
 }
 
 export const MINIGAME_META_LIST: MinigameMeta[] = [
+  { id: 'fruit-frenzy', name: 'Fruit Frenzy (3D Arena)', description: 'Kapd el a hulló gyümölcsöket kosárral a D-paddal!', instructions: 'D-PAD = MOZGÁS! Kerüld a bombákat (-3), kapd el az aranyalmát (+3)!' },
+  { id: 'bomb-dodge', name: 'Bomb Dodge (3D Arena)', description: 'Térj ki a lehulló bombák és robbanások elől a D-paddal!', instructions: 'D-PAD = MOZGÁS! Fuss ki a piros veszélyzónákból a robbanás előtt!' },
+  { id: 'push-arena', name: 'Push Arena (3D Arena)', description: 'Lökd le az ellenfeleket a lebegő arénáról!', instructions: 'D-PAD = MOZGÁS • [A] = LÖKÉS • [B] = DASH!' },
+  { id: 'crown-chase', name: 'Crown Chase (3D Arena)', description: 'Tartsd meg a koronát a legtovább!', instructions: 'D-PAD = MOZGÁS! Érj a koronáshoz a lopáshoz, majd menekülj!' },
+  { id: 'paint-panic', name: 'Paint Panic (3D Arena)', description: 'Fesd le a padlót a saját színeddel a D-paddal!', instructions: 'D-PAD = MOZGÁS! Ahol jársz, felveszi a színedet!' },
+  { id: 'controller-test', name: 'Controller Test Arena', description: 'Szabad teszt aréna a telefonos kontroller teszteléséhez!', instructions: 'D-PAD = MOZGÁS • [A] = UGRÁS • [B] = AKCIÓ' },
   { id: 'reaction-rush', name: 'Reaction Rush', description: 'Reagálj a leggyorsabban a GO-ra!', instructions: 'VÁRJ A GO-RA!' },
   { id: 'shake-it', name: 'Shake It', description: 'Rázd a telefont, lődd ki a rakétát!', instructions: 'RÁZD VAGY TAPELD GŐZERŐVEL!' },
   { id: 'bomb-pass', name: 'Bomb Pass', description: 'Passzold el a bombát, mielőtt felrobban!', instructions: 'ADD ÁT MÁSNAK IDŐBEN!' },
