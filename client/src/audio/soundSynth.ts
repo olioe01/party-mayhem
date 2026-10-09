@@ -466,9 +466,44 @@ class SoundSynthesizer {
     this.playVictory();
   }
 
-  // Lose minigame
-  playLose() {
-    this.playWrong();
+  // Jump audio (procedural frequency sweep up)
+  playJump() {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      const now = ctx.currentTime;
+      osc.frequency.setValueAtTime(160, now);
+      osc.frequency.exponentialRampToValueAtTime(520, now + 0.14);
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+      osc.connect(gain);
+      gain.connect(this.getSfxDestination() || ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } catch (_) {}
+  }
+
+  // Dash audio (whoosh / burst sound)
+  playDash() {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      const now = ctx.currentTime;
+      osc.frequency.setValueAtTime(360, now);
+      osc.frequency.exponentialRampToValueAtTime(140, now + 0.13);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.13);
+      osc.connect(gain);
+      gain.connect(this.getSfxDestination() || ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.14);
+    } catch (_) {}
   }
 }
 

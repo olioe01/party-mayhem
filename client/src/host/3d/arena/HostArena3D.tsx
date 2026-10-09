@@ -32,6 +32,12 @@ export const HostArena3D: React.FC<HostArena3DProps> = ({ room }) => {
 
   // Sound triggering cache
   const lastCatchEventIdRef = useRef<number>(0);
+  const lastActionACountRef = useRef<Map<string, number>>(new Map());
+  const lastActionBCountRef = useRef<Map<string, number>>(new Map());
+
+  // Real-time room state ref so RAF animation loop always reads latest authoritative server data
+  const roomRef = useRef<RoomState>(room);
+  roomRef.current = room;
 
   const mg = room.activeMinigame;
   const mgData = mg?.data || {};
@@ -211,9 +217,13 @@ export const HostArena3D: React.FC<HostArena3DProps> = ({ room }) => {
       const elapsedTime = clock.getElapsedTime();
       const delta = clock.getDelta();
 
+      const currentRoom = roomRef.current;
+      const currentMg = currentRoom?.activeMinigame;
+      const currentMgData = currentMg?.data || {};
+
       // Animate 👑 Crown rotation and bobbing for Crown Chase
-      if (crownMeshRef.current && mg?.data?.currentCrownHolder) {
-        const holderId = mg.data.currentCrownHolder;
+      if (crownMeshRef.current && currentMg?.data?.currentCrownHolder) {
+        const holderId = currentMg.data.currentCrownHolder;
         const holderChar = charactersMapRef.current.get(holderId);
         if (holderChar) {
           crownMeshRef.current.position.set(
@@ -229,30 +239,68 @@ export const HostArena3D: React.FC<HostArena3DProps> = ({ room }) => {
       }
 
       // Smoothly update characters in arena
-      const simPlayers = mgData.players as Record<string, any> | undefined;
+      const simPlayers = currentMgData.players as Record<string, any> | undefined;
       charactersMapRef.current.forEach((char, pId) => {
         const sim = simPlayers?.[pId];
         if (sim) {
-          // Smooth interpolation towards authoritative server position
-          char.root.position.x = THREE.MathUtils.lerp(char.root.position.x, sim.x, 0.35);
-          char.root.position.z = THREE.MathUtils.lerp(char.root.position.z, sim.z, 0.35);
-          char.root.position.y = sim.isFalling ? THREE.MathUtils.lerp(char.root.position.y, -4, 0.2) : 0;
+          // Target authoritative positions
+          const targetX = sim.x ?? 0;
+          const targetY = sim.isFalling ? -4 : (sim.y ?? 0);
+          const targetZ = sim.z ?? 0;
 
-          // Facing rotation
+          // Smooth interpolation towards authoritative server position
+          char.root.position.x = THREE.MathUtils.lerp(char.root.position.x, targetX, 0.4);
+          char.root.position.y = THREE.MathUtils.lerp(char.root.position.y, targetY, 0.4);
+          char.root.position.z = THREE.MathUtils.lerp(char.root.position.z, targetZ, 0.4);
+
+          // Facing rotation (shortest angle difference)
           if (sim.facing !== undefined) {
-            char.root.rotation.y = THREE.MathUtils.lerp(char.root.rotation.y, sim.facing, 0.3);
+            let diff = sim.facing - char.root.rotation.y;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            char.root.rotation.y += diff * 0.35;
           }
 
-          // Walking vs Idle animation
+          // Sound triggers on action button taps
+          const curActionACount = sim.actionACount || 0;
+          const prevActionACount = lastActionACountRef.current.get(pId) || 0;
+          if (curActionACount > prevActionACount) {
+            lastActionACountRef.current.set(pId, curActionACount);
+            sounds.playJump();
+          }
+
+          const curActionBCount = sim.actionBCount || 0;
+          const prevActionBCount = lastActionBCountRef.current.get(pId) || 0;
+          if (curActionBCount > prevActionBCount) {
+            lastActionBCountRef.current.set(pId, curActionBCount);
+            sounds.playDash();
+          }
+
+          // Animation states
+          const isJumping = (sim.y || 0) > 0.05 || Boolean(sim.isJumping);
+          const isDashing = Boolean(sim.isDashing || sim.actionB);
           const speed = Math.hypot(sim.vx || 0, sim.vz || 0);
-          if (speed > 0.3) {
+
+          if (isJumping) {
+            char.animate('jump', elapsedTime);
+          } else if (isDashing) {
+            char.animate('dash', elapsedTime);
+          } else if (speed > 0.3) {
             char.animate('walk', elapsedTime * 1.5, (elapsedTime * 4) % 1);
           } else {
             char.animate('idle', elapsedTime);
           }
 
-          // Visual hit flash
-          if (sim.isHit) {
+          // Visual Action / Dash spin & squash/stretch
+          if (isDashing) {
+            char.root.rotation.y += Math.PI * 6 * delta;
+          }
+
+          if (isJumping) {
+            char.root.scale.set(0.9, 1.2, 0.9);
+          } else if (sim.actionB) {
+            char.root.scale.set(1.2, 1.1, 1.2);
+          } else if (sim.isHit) {
             char.root.scale.set(0.85, 0.85, 0.85);
           } else {
             char.root.scale.set(1.0, 1.0, 1.0);
@@ -272,8 +320,8 @@ export const HostArena3D: React.FC<HostArena3DProps> = ({ room }) => {
       });
 
       // Render falling items for Fruit Frenzy
-      if (mg?.id === 'fruit-frenzy') {
-        const items = (mg.data?.items || []) as any[];
+      if (currentMg?.id === 'fruit-frenzy') {
+        const items = (currentMg.data?.items || []) as any[];
         const activeIds = new Set<number>();
 
         items.forEach(item => {
@@ -301,7 +349,7 @@ export const HostArena3D: React.FC<HostArena3DProps> = ({ room }) => {
         });
 
         // Trigger sound effects for new catch events
-        const catchEvents = (mg.data?.catchEvents || []) as any[];
+        const catchEvents = (currentMg.data?.catchEvents || []) as any[];
         if (catchEvents.length > 0) {
           const latest = catchEvents[catchEvents.length - 1];
           if (latest.timestamp > lastCatchEventIdRef.current) {
@@ -316,8 +364,8 @@ export const HostArena3D: React.FC<HostArena3DProps> = ({ room }) => {
       }
 
       // Render Bomb Dodge hazard warning circles
-      if (mg?.id === 'bomb-dodge') {
-        const hazards = (mg.data?.hazards || []) as any[];
+      if (currentMg?.id === 'bomb-dodge') {
+        const hazards = (currentMg.data?.hazards || []) as any[];
         const activeHazards = new Set<number>();
 
         hazards.forEach(h => {
@@ -362,14 +410,14 @@ export const HostArena3D: React.FC<HostArena3DProps> = ({ room }) => {
       }
 
       // Update Paint Panic tiles colors
-      if (mg?.id === 'paint-panic' && mg.data?.cells) {
-        const cells: number[] = mg.data.cells;
+      if (currentMg?.id === 'paint-panic' && currentMg.data?.cells) {
+        const cells: number[] = currentMg.data.cells;
         const tiles = paintTilesRef.current;
-        const playerIndices: Record<string, number> = mg.data.playerIndices || {};
+        const playerIndices: Record<string, number> = currentMg.data.playerIndices || {};
         const colorsByIndex: Record<number, number> = {};
 
         Object.entries(playerIndices).forEach(([pId, idx]) => {
-          const p = room.players[pId];
+          const p = currentRoom.players[pId];
           if (p && p.color) {
             colorsByIndex[idx] = parseInt(p.color.replace('#', '0x'), 16);
           }
@@ -510,6 +558,97 @@ export const HostArena3D: React.FC<HostArena3DProps> = ({ room }) => {
           );
         })}
       </div>
+
+      {/* 3D CONTROLLER TEST PIPELINE DIAGNOSTIC HUD */}
+      {mg?.id === 'controller-test' && (
+        <div className="absolute bottom-4 inset-x-4 z-30 pointer-events-none flex flex-col items-center gap-2">
+          <div className="bg-slate-950/90 border border-cyan-500/40 rounded-2xl p-3 shadow-2xl backdrop-blur-md max-w-4xl w-full flex flex-col gap-2">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 px-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-black tracking-wider text-cyan-300 font-mono">
+                  3D MOVEMENT & INPUT DIAGNOSTIC PIPELINE
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+                  Tick #{mgData.serverTick || 0}
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono flex items-center gap-3">
+                <span>D-PAD: ◀ ▼ ▲ ▶</span>
+                <span>[A]: UGRÁS (HOP)</span>
+                <span>[B]: DASH (BURST)</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {Object.values(room.players).map(p => {
+                const sim = mgData.players?.[p.id] as any;
+                const input = sim?.lastInput || p.lastInputState || { up: false, down: false, left: false, right: false, a: false, b: false };
+                const isMultitouch = (input.right || input.left || input.up || input.down) && (input.a || input.b);
+                const char = charactersMapRef.current.get(p.id);
+                const meshPos = char?.root.position;
+                const speed = Math.hypot(sim?.vx || 0, sim?.vz || 0);
+
+                return (
+                  <div key={p.id} className="bg-slate-900/90 rounded-xl p-2.5 border border-slate-800 flex flex-col gap-1.5 text-xs font-mono">
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.color || '#3b82f6' }} />
+                        <span className="font-bold text-white truncate max-w-[120px]">{p.name}</span>
+                        {p.isBot ? (
+                          <span className="text-[9px] px-1 rounded bg-purple-900/60 text-purple-300">BOT</span>
+                        ) : (
+                          <span className="text-[9px] px-1 rounded bg-emerald-900/60 text-emerald-300">HUMAN</span>
+                        )}
+                      </div>
+                      {/* Multitouch Badge */}
+                      {isMultitouch ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/40 animate-pulse">
+                          ⚡ MULTITOUCH (MOZGÁS + AKCIÓ)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-500">
+                          1-touch / Idle
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Input Matrix */}
+                    <div className="flex items-center gap-1.5 py-1 px-2 bg-slate-950/70 rounded-lg">
+                      <span className="text-[10px] text-slate-400 font-bold mr-1">INPUT:</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${input.up ? 'bg-amber-400 text-slate-950 shadow' : 'bg-slate-800 text-slate-600'}`}>▲ FEL</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${input.down ? 'bg-amber-400 text-slate-950 shadow' : 'bg-slate-800 text-slate-600'}`}>▼ LE</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${input.left ? 'bg-amber-400 text-slate-950 shadow' : 'bg-slate-800 text-slate-600'}`}>◀ BAL</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${input.right ? 'bg-amber-400 text-slate-950 shadow' : 'bg-slate-800 text-slate-600'}`}>▶ JOBB</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ml-auto ${input.a ? 'bg-emerald-400 text-slate-950 shadow animate-pulse' : 'bg-slate-800 text-slate-600'}`}>[A] UGRÁS</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${input.b ? 'bg-cyan-400 text-slate-950 shadow animate-pulse' : 'bg-slate-800 text-slate-600'}`}>[B] DASH</span>
+                    </div>
+
+                    {/* Simulation & 3D Transform Details */}
+                    <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-300 pt-0.5">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-slate-400">SZERVER SZIMULÁCIÓ:</span>
+                        <span>Poz: X: {(sim?.x ?? 0).toFixed(2)} | Y: {(sim?.y ?? 0).toFixed(2)} | Z: {(sim?.z ?? 0).toFixed(2)}</span>
+                        <span>Seb: {speed.toFixed(1)} m/s (Vx: {(sim?.vx ?? 0).toFixed(1)}, Vz: {(sim?.vz ?? 0).toFixed(1)})</span>
+                        <span className="text-slate-400">Ugrások: {sim?.actionACount || 0} • Dashek: {sim?.actionBCount || 0}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-slate-400">3D MEGJELENÍTŐ (RENDER):</span>
+                        <span className={meshPos ? 'text-emerald-400 font-bold' : 'text-rose-400'}>
+                          {meshPos ? `✓ Mesh csatolva: (${meshPos.x.toFixed(2)}, ${meshPos.y.toFixed(2)}, ${meshPos.z.toFixed(2)})` : '✗ Mesh nincs jelen'}
+                        </span>
+                        <span>Állapot: {(sim?.y ?? 0) > 0.05 ? 'UGRÁS (JUMP)' : sim?.isDashing ? 'DASH BURST' : speed > 0.3 ? 'SÉTA (WALK)' : 'TÉTLEN (IDLE)'}</span>
+                        <span className="text-slate-400">Irány: {Math.round(((sim?.facing ?? 0) * 180) / Math.PI)}°</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

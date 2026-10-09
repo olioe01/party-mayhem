@@ -6,8 +6,10 @@ export interface ArenaPlayerSim {
   color: string;
   isBot: boolean;
   x: number;
+  y?: number;
   z: number;
   vx: number;
+  vy?: number;
   vz: number;
   facing: number;
   speed: number;
@@ -17,6 +19,16 @@ export interface ArenaPlayerSim {
   hitTimer?: number;
   isStunned?: boolean;
   stunTimer?: number;
+  isJumping?: boolean;
+  isDashing?: boolean;
+  dashTimer?: number;
+  actionA?: boolean;
+  actionATimer?: number;
+  actionACount?: number;
+  actionB?: boolean;
+  actionBTimer?: number;
+  actionBCount?: number;
+  lastInputTimestamp?: number;
   crownTime?: number;
   hasCrown?: boolean;
   cooldownA?: number;

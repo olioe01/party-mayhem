@@ -43,13 +43,32 @@ export const controllerTestMinigame: MinigameDefinition = {
         color: p.color || '#3b82f6',
         isBot: Boolean(p.isBot),
         x: spreadX,
+        y: 0,
         z: 0,
         vx: 0,
+        vy: 0,
         vz: 0,
         facing: 0,
         speed: 5.5,
         radius: 0.55,
         score: 0,
+        isJumping: false,
+        isDashing: false,
+        dashTimer: 0,
+        actionA: false,
+        actionATimer: 0,
+        actionACount: 0,
+        actionB: false,
+        actionBTimer: 0,
+        actionBCount: 0,
+        lastInput: {
+          up: false,
+          down: false,
+          left: false,
+          right: false,
+          a: false,
+          b: false,
+        },
       };
       scores[p.id] = 0;
     });
@@ -57,6 +76,8 @@ export const controllerTestMinigame: MinigameDefinition = {
     room.activeMinigame!.data = {
       players: simPlayers,
       scores,
+      serverTick: 0,
+      lastInputTime: Date.now(),
     };
   },
 
@@ -65,19 +86,49 @@ export const controllerTestMinigame: MinigameDefinition = {
   handleInput(room: RoomState, playerId: string, data: any) {
     const mgData = room.activeMinigame?.data;
     if (!mgData || !mgData.players || !mgData.players[playerId]) return;
-    const sim = mgData.players[playerId];
+    const sim: ArenaPlayerSim = mgData.players[playerId];
 
     if (data && typeof data === 'object') {
+      const prevA = sim.lastInput?.a ?? false;
+      const prevB = sim.lastInput?.b ?? false;
+      const curA = Boolean(data.a);
+      const curB = Boolean(data.b);
+
       sim.lastInput = {
         up: Boolean(data.up),
         down: Boolean(data.down),
         left: Boolean(data.left),
         right: Boolean(data.right),
-        a: Boolean(data.a),
-        b: Boolean(data.b),
+        a: curA,
+        b: curB,
       };
+      sim.lastInputTimestamp = Date.now();
+      mgData.lastInputTime = Date.now();
 
-      if (data.a || data.b) {
+      if (room.players[playerId]) {
+        room.players[playerId].lastInputState = sim.lastInput;
+      }
+
+      // [A] Button Trigger: JUMP / HOP ARC
+      if (curA && !prevA) {
+        if ((sim.y ?? 0) <= 0.05) {
+          sim.vy = 8.5; // launch velocity upward
+          sim.isJumping = true;
+          sim.actionA = true;
+          sim.actionATimer = 0.5;
+          sim.actionACount = (sim.actionACount || 0) + 1;
+          sim.score += 1;
+          mgData.scores[playerId] = sim.score;
+        }
+      }
+
+      // [B] Button Trigger: DASH BURST / ACTION
+      if (curB && !prevB) {
+        sim.isDashing = true;
+        sim.dashTimer = 0.3;
+        sim.actionB = true;
+        sim.actionBTimer = 0.45;
+        sim.actionBCount = (sim.actionBCount || 0) + 1;
         sim.score += 1;
         mgData.scores[playerId] = sim.score;
       }
@@ -87,6 +138,8 @@ export const controllerTestMinigame: MinigameDefinition = {
   update(room: RoomState, dt: number): boolean {
     const mgData = room.activeMinigame?.data;
     if (!mgData) return false;
+
+    mgData.serverTick = (mgData.serverTick || 0) + 1;
 
     Object.values(mgData.players as Record<string, ArenaPlayerSim>).forEach(p => {
       let input = p.lastInput;
@@ -110,7 +163,40 @@ export const controllerTestMinigame: MinigameDefinition = {
           b: false,
         };
       }
+
+      // Dash speed multiplier
+      const baseSpeed = 5.5;
+      if (p.isDashing && p.dashTimer && p.dashTimer > 0) {
+        p.speed = baseSpeed * 1.85;
+        p.dashTimer -= dt;
+        if (p.dashTimer <= 0) {
+          p.isDashing = false;
+        }
+      } else {
+        p.speed = baseSpeed;
+      }
+
       updatePlayerMovement(p, input, dt, ARENA_BOUNDS);
+
+      // Vertical jump gravity physics
+      if ((p.y ?? 0) > 0 || (p.vy ?? 0) > 0) {
+        p.vy = (p.vy ?? 0) - 28.0 * dt;
+        p.y = Math.max(0, (p.y ?? 0) + (p.vy ?? 0) * dt);
+        if (p.y === 0) {
+          p.vy = 0;
+          p.isJumping = false;
+        }
+      }
+
+      // Action timers decay
+      if (p.actionATimer && p.actionATimer > 0) {
+        p.actionATimer -= dt;
+        if (p.actionATimer <= 0) p.actionA = false;
+      }
+      if (p.actionBTimer && p.actionBTimer > 0) {
+        p.actionBTimer -= dt;
+        if (p.actionBTimer <= 0) p.actionB = false;
+      }
     });
 
     return false;

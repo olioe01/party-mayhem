@@ -391,7 +391,7 @@ export class PartyCharacter3D {
    * Procedural animation updates (run every frame)
    */
   public animate(
-    state: 'idle' | 'walk' | 'celebrate' | 'sad',
+    state: 'idle' | 'walk' | 'celebrate' | 'sad' | 'jump' | 'dash',
     time: number,
     walkProgress: number = 0
   ) {
@@ -410,9 +410,13 @@ export class PartyCharacter3D {
 
       this.handL.position.y = 0.44 + Math.sin(time * 3.2 + 0.4) * 0.02;
       this.handR.position.y = 0.44 + Math.cos(time * 3.2 + 0.4) * 0.02;
+      this.handL.position.z = 0.05;
+      this.handR.position.z = 0.05;
 
       this.footL.position.y = 0.10;
       this.footR.position.y = 0.10;
+      this.footL.position.z = 0.04;
+      this.footR.position.z = 0.04;
       this.footL.rotation.x = 0;
       this.footR.rotation.x = 0;
     } else if (state === 'walk') {
@@ -428,6 +432,26 @@ export class PartyCharacter3D {
 
       this.handL.position.z = 0.05 - footSwing * 0.18;
       this.handR.position.z = 0.05 + footSwing * 0.18;
+    } else if (state === 'jump') {
+      // Jump pose: arms reaching up, feet tucked
+      this.bodyMesh.position.y = 0.50;
+      this.headMesh.position.y = 0.90;
+      this.handL.position.y = 0.70;
+      this.handR.position.y = 0.70;
+      this.footL.position.y = 0.22;
+      this.footR.position.y = 0.22;
+      this.footL.rotation.x = -0.3;
+      this.footR.rotation.x = -0.3;
+    } else if (state === 'dash') {
+      // Dash pose: aerodynamic tilt forward, hands trailing
+      this.bodyMesh.position.y = 0.38;
+      this.headMesh.position.y = 0.76;
+      this.handL.position.y = 0.35;
+      this.handR.position.y = 0.35;
+      this.handL.position.z = -0.22;
+      this.handR.position.z = -0.22;
+      this.footL.position.y = 0.08;
+      this.footR.position.y = 0.08;
     } else if (state === 'celebrate') {
       const jump = Math.abs(Math.sin(time * 8.0)) * 0.45;
       this.bodyMesh.position.y = 0.44 + jump;
