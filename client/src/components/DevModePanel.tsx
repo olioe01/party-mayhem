@@ -3,7 +3,8 @@ import { RoomState } from '@shared/types';
 import { socket } from '../socket';
 import { SOCKET_EVENTS } from '@shared/events';
 import { CHAOS_EVENTS, MINIGAME_META_LIST } from '@shared/constants';
-import { Wrench, UserPlus, Play, Sparkles, X, ChevronDown } from 'lucide-react';
+import { BOARD_TILES } from '@shared/boardData';
+import { Wrench, UserPlus, Play, Sparkles, X, ChevronDown, Eye } from 'lucide-react';
 
 interface DevModePanelProps {
   room: RoomState;
@@ -11,6 +12,7 @@ interface DevModePanelProps {
 
 export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [showCharDebug, setShowCharDebug] = useState(false);
   const [selectedMinigame, setSelectedMinigame] = useState<string>('reaction-rush');
   const [selectedEvent, setSelectedEvent] = useState<string>('coin_storm');
 
@@ -193,6 +195,50 @@ export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* 3D Characters Debug */}
+      <div className="flex flex-col gap-2 border-t border-slate-800 pt-3">
+        <button
+          onClick={() => setShowCharDebug(!showCharDebug)}
+          className="flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-400 hover:text-white"
+        >
+          <span className="flex items-center gap-1.5">
+            <Eye className="w-3.5 h-3.5 text-cyan-400" />
+            3D Karakterek Állapota ({Object.keys(room.players).length})
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showCharDebug ? 'rotate-180' : ''}`} />
+        </button>
+
+        {showCharDebug && (
+          <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+            {Object.values(room.players).map((p) => {
+              const tile = BOARD_TILES[p.boardPosition] || BOARD_TILES[0];
+              const pos3d = tile ? `[${tile.position3D[0].toFixed(1)}, ${(tile.position3D[1] + 0.185).toFixed(2)}, ${tile.position3D[2].toFixed(1)}]` : 'N/A';
+              return (
+                <div key={p.id} className="bg-slate-800/90 p-2 rounded-lg border border-slate-700/80 text-[11px] flex flex-col gap-1">
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: p.color || '#fff' }} />
+                      <span className="text-white">{p.name}</span>
+                      {p.isBot && <span className="bg-purple-900/80 text-purple-200 text-[9px] px-1 rounded">BOT</span>}
+                    </span>
+                    <span className={p.connected !== false ? 'text-emerald-400' : 'text-rose-400'}>
+                      {p.connected !== false ? 'online' : 'offline'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-slate-400 text-[10px]">
+                    <div>Mező: <span className="text-amber-300 font-mono">#{p.boardPosition}</span> ({tile?.label || 'START'})</div>
+                    <div>Kalap: <span className="text-slate-200">{p.cosmetic || 'none'}</span></div>
+                    <div className="col-span-2">3D Pos: <span className="text-cyan-300 font-mono">{pos3d}</span></div>
+                    <div>ID: <span className="text-slate-500 font-mono">{p.id.slice(0, 8)}</span></div>
+                    <div>Szín: <span className="text-slate-300 font-mono">{p.color}</span></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

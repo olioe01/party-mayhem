@@ -165,7 +165,8 @@ async function startServer() {
   });
 
   const distPath = path.resolve(__dirname, '../dist/client');
-  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+  const isProd = process.env.NODE_ENV === 'production';
+  const hasDist = isProd && fs.existsSync(path.join(distPath, 'index.html'));
 
   if (hasDist) {
     // Serve production built client
@@ -181,6 +182,16 @@ async function startServer() {
       appType: 'spa'
     });
     app.use(vite.middlewares);
+    app.use(async (req, res, next) => {
+      try {
+        const indexPath = path.resolve(__dirname, '../client/index.html');
+        let html = fs.readFileSync(indexPath, 'utf-8');
+        html = await vite.transformIndexHtml(req.originalUrl, html);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+      } catch (e) {
+        next(e);
+      }
+    });
   }
 
   server.listen(PORT, '0.0.0.0', () => {

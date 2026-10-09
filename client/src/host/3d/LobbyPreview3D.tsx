@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { RoomState, Player } from '@shared/types';
-import { createPartyBlobMesh, updateBlobHat, animatePartyBlob, PALETTE } from './threeUtils';
+import { PALETTE } from './threeUtils';
+import { PartyCharacter3D } from './PartyCharacter3D';
 
 interface LobbyPreview3DProps {
   room: RoomState;
@@ -11,7 +12,7 @@ export const LobbyPreview3D: React.FC<LobbyPreview3DProps> = ({ room }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const blobsMapRef = useRef<Map<string, THREE.Group>>(new Map());
+  const charactersMapRef = useRef<Map<string, PartyCharacter3D>>(new Map());
   const animFrameIdRef = useRef<number | null>(null);
 
   const players = Object.values(room.players).slice(0, 5);
@@ -105,11 +106,11 @@ export const LobbyPreview3D: React.FC<LobbyPreview3DProps> = ({ room }) => {
 
       const time = now * 0.001;
 
-      // Animate all active blobs with idle procedural animation
-      blobsMapRef.current.forEach((blob, playerId) => {
+      // Animate all active characters with idle/celebrate procedural animation
+      charactersMapRef.current.forEach((char, playerId) => {
         const playerObj = room.players[playerId];
         const animMode = playerObj?.isReady ? 'celebrate' : 'idle';
-        animatePartyBlob(blob, animMode, time + playerId.charCodeAt(0) * 0.2);
+        char.animate(animMode, time + playerId.charCodeAt(0) * 0.2);
       });
 
       renderer.render(scene, camera);
@@ -135,43 +136,48 @@ export const LobbyPreview3D: React.FC<LobbyPreview3DProps> = ({ room }) => {
       if (renderer.domElement && container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
+      charactersMapRef.current.forEach(char => {
+        scene.remove(char.root);
+        char.dispose();
+      });
+      charactersMapRef.current.clear();
       renderer.dispose();
     };
   }, []);
 
-  // Sync 3D Blob characters with connected players
+  // Sync 3D PartyCharacter3D with connected players
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
 
     const slotXPositions = [-3.2, -1.6, 0, 1.6, 3.2];
     const slotZPositions = [0.3, 0.1, 0, 0.1, 0.3];
-    const currentMap = blobsMapRef.current;
+    const currentMap = charactersMapRef.current;
 
-    // Remove blobs for players who left
-    currentMap.forEach((blob, id) => {
+    // Remove characters for players who left
+    currentMap.forEach((char, id) => {
       if (!room.players[id]) {
-        scene.remove(blob);
+        scene.remove(char.root);
+        char.dispose();
         currentMap.delete(id);
       }
     });
 
-    // Add or update blobs
+    // Add or update characters
     players.forEach((player, index) => {
       const targetX = slotXPositions[index];
       const targetZ = slotZPositions[index];
 
-      let blob = currentMap.get(player.id);
-      if (!blob) {
-        blob = createPartyBlobMesh(player.color, player.cosmetic || 'none');
-        blob.position.set(targetX, 0.2, targetZ);
-        blob.rotation.y = index < 2 ? 0.25 : index > 2 ? -0.25 : 0;
-        scene.add(blob);
-        currentMap.set(player.id, blob);
+      let char = currentMap.get(player.id);
+      if (!char) {
+        char = new PartyCharacter3D(player, false);
+        char.root.position.set(targetX, 0.2, targetZ);
+        char.root.rotation.y = index < 2 ? 0.25 : index > 2 ? -0.25 : 0;
+        scene.add(char.root);
+        currentMap.set(player.id, char);
       } else {
-        // Update hat if changed
-        updateBlobHat(blob, player.cosmetic || 'none');
-        blob.position.set(targetX, 0.2, targetZ);
+        char.update(player, false);
+        char.root.position.set(targetX, 0.2, targetZ);
       }
     });
   }, [room.players, players]);

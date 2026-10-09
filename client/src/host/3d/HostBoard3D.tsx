@@ -5,14 +5,13 @@ import { BOARD_TILES } from '@shared/boardData';
 import {
   createIslandTerrain,
   createTilePad,
-  createPartyBlobMesh,
-  updateBlobHat,
-  animatePartyBlob,
   createDiceMesh,
   getDiceTargetEuler,
   setIslandDecorationQuality,
   PALETTE
 } from './threeUtils';
+import { PartyCharacter3D, getFormationOffset } from './PartyCharacter3D';
+import { Player } from '@shared/types';
 
 interface HostBoard3DProps {
   room: RoomState;
@@ -34,7 +33,7 @@ export const HostBoard3D: React.FC<HostBoard3DProps> = ({
   // Scene object instances
   const islandMeshRef = useRef<THREE.Group | null>(null);
   const diceMeshRef = useRef<THREE.Group | null>(null);
-  const playerMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
+  const charactersMapRef = useRef<Map<string, PartyCharacter3D>>(new Map());
   const tileMeshesRef = useRef<Map<number, THREE.Group>>(new Map());
 
   // Camera targets for smooth lerping
@@ -302,39 +301,60 @@ export const HostBoard3D: React.FC<HostBoard3DProps> = ({
         // Delta-time accurate progress independent of display refresh rate
         const stepProgressInc = elapsed / moveAnim.stepDuration;
         moveAnim.stepProgress += stepProgressInc;
-        const playerGroup = playerMeshesRef.current.get(moveAnim.playerId);
+        const char = charactersMapRef.current.get(moveAnim.playerId);
 
-        if (playerGroup && moveAnim.path.length > 1) {
+        if (char && moveAnim.path.length > 1) {
           const fromTileId = moveAnim.path[moveAnim.currentStepIdx];
           const toTileId = moveAnim.path[moveAnim.currentStepIdx + 1];
 
-          const fromPad = tileMeshesRef.current.get(fromTileId);
-          const toPad = tileMeshesRef.current.get(toTileId);
+          const fromTile = BOARD_TILES.find(t => t.id === fromTileId) || BOARD_TILES[0];
+          const toTile = BOARD_TILES.find(t => t.id === toTileId) || BOARD_TILES[0];
 
-          if (fromPad && toPad) {
-            const fromPos = fromPad.position;
-            const toPos = toPad.position;
+          if (fromTile.position3D && toTile.position3D) {
+            const [fx, fy, fz] = fromTile.position3D;
+            const [tx, ty, tz] = toTile.position3D;
+            const fromPadTopY = fy + 0.185;
+            const toPadTopY = ty + 0.185;
             const t = Math.min(1, moveAnim.stepProgress);
 
-            // Lerp position with energetic parabolic jump arc in Y
-            playerGroup.position.lerpVectors(fromPos, toPos, t);
-            playerGroup.position.y += Math.sin(t * Math.PI) * 1.1 + 0.3;
+            // Parabolic jump arc in Y (0.85 high)
+            const arcY = Math.sin(t * Math.PI) * 0.85;
+
+            // Target formation offset on the destination tile for the final hop
+            let destOffsetX = 0;
+            let destOffsetZ = 0;
+            const isFinalHop = moveAnim.currentStepIdx >= moveAnim.path.length - 2;
+            if (isFinalHop) {
+              const destPlayers = Object.values(room.players).filter(
+                p => p.boardPosition === toTileId && p.id !== moveAnim.playerId
+              );
+              const [ox, oz] = getFormationOffset(destPlayers.length, destPlayers.length + 1);
+              destOffsetX = ox;
+              destOffsetZ = oz;
+            }
+
+            const curX = THREE.MathUtils.lerp(fx, tx + destOffsetX, t);
+            const curY = THREE.MathUtils.lerp(fromPadTopY, toPadTopY, t) + arcY;
+            const curZ = THREE.MathUtils.lerp(fz, tz + destOffsetZ, t);
+
+            char.root.position.set(curX, curY, curZ);
 
             // Turn face towards moving direction
-            const dirX = toPos.x - fromPos.x;
-            const dirZ = toPos.z - fromPos.z;
-            playerGroup.rotation.y = Math.atan2(dirX, dirZ);
+            const dirX = (tx + destOffsetX) - fx;
+            const dirZ = (tz + destOffsetZ) - fz;
+            if (Math.hypot(dirX, dirZ) > 0.02) {
+              char.root.rotation.y = Math.atan2(dirX, dirZ);
+            }
 
-            // Animate legs hopping
-            animatePartyBlob(playerGroup, 'walk', time, t);
+            // Animate legs and arms walking/hopping
+            char.animate('walk', time, t);
 
             // Camera look-ahead during movement
-            const lookAheadVec = toPos.clone().sub(fromPos).normalize().multiplyScalar(3.2);
-            targetCamLookRef.current.copy(playerGroup.position).add(lookAheadVec);
+            targetCamLookRef.current.set(curX, curY + 0.8, curZ);
             targetCamPosRef.current.set(
-              playerGroup.position.x * 0.72 + lookAheadVec.x * 0.25,
-              12.0,
-              playerGroup.position.z * 0.72 + lookAheadVec.z * 0.25 + 13.5
+              curX * 0.72 + Math.sign(dirX || 1) * 0.5,
+              12.5,
+              curZ * 0.72 + 13.5
             );
 
             if (moveAnim.stepProgress >= 1) {
@@ -347,14 +367,23 @@ export const HostBoard3D: React.FC<HostBoard3DProps> = ({
               if (isFinal) {
                 // Arrived at destination!
                 moveAnimRef.current = null;
-                animatePartyBlob(playerGroup, 'celebrate', time);
+                char.animate('celebrate', time);
               }
             }
           } else {
             moveAnimRef.current = null;
           }
+        } else {
+          moveAnimRef.current = null;
         }
       }
+
+      // Animate idle breathing for all stationary characters
+      charactersMapRef.current.forEach((c, id) => {
+        if (!moveAnimRef.current || moveAnimRef.current.playerId !== id) {
+          c.animate('idle', time);
+        }
+      });
 
       // Dynamic Tile Reactions (dip and emissive flash)
       tileReactionsRef.current.forEach((reaction, tId) => {
@@ -388,15 +417,6 @@ export const HostBoard3D: React.FC<HostBoard3DProps> = ({
         }
       });
 
-      // Idle procedural animation for standing players
-      playerMeshesRef.current.forEach((blob, pId) => {
-        if (!moveAnim || moveAnim.playerId !== pId) {
-          const isTurn = room.playerOrder[room.currentPlayerIndex] === pId;
-          const animState = isTurn ? 'idle' : 'idle';
-          animatePartyBlob(blob, animState, time + pId.charCodeAt(0) * 0.3);
-        }
-      });
-
       renderer.render(scene, camera);
     };
 
@@ -420,45 +440,72 @@ export const HostBoard3D: React.FC<HostBoard3DProps> = ({
       if (renderer.domElement && container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
+      charactersMapRef.current.forEach(char => {
+        scene.remove(char.root);
+        char.dispose();
+      });
+      charactersMapRef.current.clear();
       renderer.dispose();
     };
   }, [quality]);
 
-  // Sync Players 3D meshes
+  // Sync Players 3D characters
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
 
-    const currentMeshes = playerMeshesRef.current;
+    const charsMap = charactersMapRef.current;
+    const activePlayerId = room.playerOrder[room.currentPlayerIndex];
 
-    // Remove old disconnected
-    currentMeshes.forEach((mesh, id) => {
+    // Remove old disconnected or left players
+    charsMap.forEach((char, id) => {
       if (!room.players[id]) {
-        scene.remove(mesh);
-        currentMeshes.delete(id);
+        scene.remove(char.root);
+        char.dispose();
+        charsMap.delete(id);
       }
+    });
+
+    // Formation grouping: compute how many players are sharing each tile
+    const playersByTile = new Map<number, Player[]>();
+    Object.values(room.players).forEach(p => {
+      const tileId = p.boardPosition;
+      const list = playersByTile.get(tileId) || [];
+      list.push(p);
+      playersByTile.set(tileId, list);
     });
 
     // Add or update existing players
     Object.values(room.players).forEach(player => {
-      let blob = currentMeshes.get(player.id);
+      const isActive = player.id === activePlayerId;
+      let char = charsMap.get(player.id);
+
       const tile = BOARD_TILES.find(t => t.id === player.boardPosition) || BOARD_TILES[0];
       const [tx, ty, tz] = tile.position3D || [0, 0, 0];
+      const padTopY = ty + 0.185;
 
-      if (!blob) {
-        blob = createPartyBlobMesh(player.color, player.cosmetic || 'none');
-        blob.position.set(tx, ty + 0.3, tz);
-        scene.add(blob);
-        currentMeshes.set(player.id, blob);
+      const tilePlayers = playersByTile.get(player.boardPosition) || [];
+      const pIdx = tilePlayers.indexOf(player);
+      const [offsetX, offsetZ] = getFormationOffset(pIdx, tilePlayers.length);
+
+      const targetX = tx + offsetX;
+      const targetY = padTopY;
+      const targetZ = tz + offsetZ;
+
+      if (!char) {
+        char = new PartyCharacter3D(player, isActive);
+        char.root.position.set(targetX, targetY, targetZ);
+        scene.add(char.root);
+        charsMap.set(player.id, char);
       } else {
-        updateBlobHat(blob, player.cosmetic || 'none');
-        // If not in middle of hopping animation, place firmly on tile
+        char.update(player, isActive);
+        // Only update resting position if not currently mid-hop
         if (!moveAnimRef.current || moveAnimRef.current.playerId !== player.id) {
-          blob.position.set(tx, ty + 0.3, tz);
+          char.root.position.set(targetX, targetY, targetZ);
         }
       }
     });
-  }, [room.players]);
+  }, [room.players, room.currentPlayerIndex, room.playerOrder]);
 
   // Handle 3D Dice Roll Trigger
   useEffect(() => {

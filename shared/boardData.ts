@@ -33,28 +33,28 @@ export const BOARD_TILES: BoardTile[] = [
   { id: 19, type: 'BLUE', x: 62, y: 28, position3D: [4.0, 1.0, -7.2], label: '+3 COIN', description: '+3 Érme!' },
   { id: 20, type: 'TELEPORT', x: 52, y: 26, position3D: [2.0, 0.9, -7.4], label: 'TELEPORT', description: 'Térugrás a pálya egy másik pontjára!' },
   { id: 21, type: 'RED', x: 42, y: 26, position3D: [-0.5, 0.8, -7.5], label: '-5 COIN', description: 'Láva mező! -5 Érme!' },
-  { id: 22, type: 'CHAOS', x: 32, y: 28, position3D: [-3.0, 0.7, -7.2], label: 'KAOSZ', description: 'Azonnali kaotikus világméretű esemény!' },
+  { id: 22, type: 'CHAOS', x: 32, y: 28, position3D: [-3.0, 0.80, -7.2], label: 'KAOSZ', description: 'Azonnali kaotikus világméretű esemény!' },
   
   // Upper-left fork (Neon / Mystery Forest fork)
-  { id: 23, type: 'BLUE', x: 22, y: 32, position3D: [-5.5, 0.6, -6.8], label: '+3 COIN', description: '+3 Érme!', branchesTo: [24, 27] },
+  { id: 23, type: 'BLUE', x: 22, y: 32, position3D: [-5.5, 0.85, -6.8], label: '+3 COIN', description: '+3 Érme!', branchesTo: [24, 27] },
   
-  // Left shortcut (Tiles 24-26 - Secret Cave)
-  { id: 24, type: 'SECRET', x: 18, y: 44, position3D: [-5.8, 0.7, -4.5], label: 'TITOK', description: 'Titkos küldetés aktiválás!', isShortcut: true },
-  { id: 25, type: 'TRAP', x: 14, y: 56, position3D: [-5.6, 0.6, -2.5], label: 'CSAPDA', description: 'Csapda!', isShortcut: true, isDangerous: true },
-  { id: 26, type: 'GOLD', x: 16, y: 68, position3D: [-6.0, 0.5, -0.5], label: '+8 COIN', description: 'Bátor vagy, itt az arany!', isShortcut: true },
+  // Left shortcut (Tiles 24-26 - Secret Mountain Ridge)
+  { id: 24, type: 'SECRET', x: 18, y: 44, position3D: [-5.8, 1.05, -4.5], label: 'TITOK', description: 'Titkos küldetés aktiválás!', isShortcut: true },
+  { id: 25, type: 'TRAP', x: 14, y: 56, position3D: [-5.6, 0.95, -2.5], label: 'CSAPDA', description: 'Csapda!', isShortcut: true, isDangerous: true },
+  { id: 26, type: 'GOLD', x: 16, y: 68, position3D: [-6.0, 0.85, -0.5], label: '+8 COIN', description: 'Bátor vagy, itt az arany!', isShortcut: true },
 
-  // Outer scenic loop (Tiles 27-31 - Neon District)
-  { id: 27, type: 'BLUE', x: 12, y: 26, position3D: [-7.8, 0.5, -6.5], label: '+3 COIN', description: 'Külső kör.' },
-  { id: 28, type: 'STEAL', x: 6, y: 35, position3D: [-9.6, 0.4, -5.0], label: 'LOPÁS', description: 'Lopj érmét!' },
-  { id: 29, type: 'BLUE', x: 6, y: 50, position3D: [-10.8, 0.4, -3.0], label: '+3 COIN', description: '+3 Érme!' },
-  { id: 30, type: 'DUEL', x: 6, y: 65, position3D: [-11.0, 0.4, -0.8], label: 'PÁRBAJ', description: 'Párbaj zóna!' },
-  { id: 31, type: 'BOOST', x: 8, y: 75, position3D: [-10.2, 0.4, 1.5], label: 'BOOST', description: 'Minijáték pont bónusz!' },
+  // Outer scenic loop (Tiles 27-31 - Raised West Promenade)
+  { id: 27, type: 'BLUE', x: 12, y: 26, position3D: [-7.8, 0.95, -6.5], label: '+3 COIN', description: 'Külső kör.' },
+  { id: 28, type: 'STEAL', x: 6, y: 35, position3D: [-9.6, 0.90, -5.0], label: 'LOPÁS', description: 'Lopj érmét!' },
+  { id: 29, type: 'BLUE', x: 6, y: 50, position3D: [-10.8, 0.88, -3.0], label: '+3 COIN', description: '+3 Érme!' },
+  { id: 30, type: 'DUEL', x: 6, y: 65, position3D: [-11.0, 0.85, -0.8], label: 'PÁRBAJ', description: 'Párbaj zóna!' },
+  { id: 31, type: 'BOOST', x: 8, y: 75, position3D: [-10.2, 0.80, 1.5], label: 'BOOST', description: 'Minijáték pont bónusz!' },
 
   // Final stretch back to Start (Party Boardwalk)
-  { id: 32, type: 'SWAP', x: 22, y: 65, position3D: [-8.5, 0.4, 2.8], label: 'HELYCSERE', description: 'Kavarodás a finis előtt!' },
-  { id: 33, type: 'BLUE', x: 32, y: 65, position3D: [-7.5, 0.4, 4.5], label: '+3 COIN', description: '+3 Érme!' },
-  { id: 34, type: 'CHAOS', x: 42, y: 65, position3D: [-6.5, 0.4, 5.8], label: 'KAOSZ', description: 'Káosz esemény!' },
-  { id: 35, type: 'GOLD', x: 52, y: 65, position3D: [-7.0, 0.4, 6.6], label: '+8 COIN', description: 'Arany az utolsó egyenesben!' }
+  { id: 32, type: 'SWAP', x: 22, y: 65, position3D: [-8.5, 0.72, 2.8], label: 'HELYCSERE', description: 'Kavarodás a finis előtt!' },
+  { id: 33, type: 'BLUE', x: 32, y: 65, position3D: [-7.5, 0.62, 4.5], label: '+3 COIN', description: '+3 Érme!' },
+  { id: 34, type: 'CHAOS', x: 42, y: 65, position3D: [-6.5, 0.52, 5.8], label: 'KAOSZ', description: 'Káosz esemény!' },
+  { id: 35, type: 'GOLD', x: 52, y: 65, position3D: [-7.0, 0.45, 6.6], label: '+8 COIN', description: 'Arany az utolsó egyenesben!' }
 ];
 
 // Helper to calculate the next tile for linear movement or branching

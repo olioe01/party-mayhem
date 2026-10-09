@@ -24,7 +24,7 @@ export const PALETTE = {
 };
 
 // Reusable basic materials for high performance
-const sharedMaterials = {
+export const sharedMaterials = {
   eyeWhite: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 }),
   pupilBlack: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1 }),
   cheekPink: new THREE.MeshBasicMaterial({ color: 0xff99bb }),
@@ -868,15 +868,15 @@ export function createBoardPathAndArrows(parent: THREE.Group) {
     const mx = (fx + tx) * 0.5;
     const my = (fy + ty) * 0.5;
     const mz = (fz + tz) * 0.5;
-    const yaw = Math.atan2(dx, dz);
+    const dist3D = Math.hypot(dx, dy, dz);
 
     // Skip connecting track over boardwalk (tiles 13 to 17 have wooden bridge decks)
     if (!(from >= 13 && to <= 18 && !isShortcut)) {
-      // 1. Carved stone connector track ribbon
-      const trackGeo = new THREE.BoxGeometry(0.44, 0.05, len);
+      // 1. Carved stone connector track ribbon aligned with 3D slope
+      const trackGeo = new THREE.BoxGeometry(0.44, 0.05, dist3D);
       const trackMesh = new THREE.Mesh(trackGeo, isShortcut ? trackMatShortcut : trackMatRegular);
       trackMesh.position.set(mx, my - 0.04, mz);
-      trackMesh.rotation.y = yaw;
+      trackMesh.lookAt(tx, ty - 0.04, tz);
       trackMesh.receiveShadow = true;
       pathGroup.add(trackMesh);
     }
@@ -898,7 +898,7 @@ export function createBoardPathAndArrows(parent: THREE.Group) {
   pathGroup.add(sign8);
 
   const sign23 = createForkSignpost('SECRET ⬇️', 'OUTER LOOP ⬅️');
-  sign23.position.set(-6.5, 0.6, -7.6);
+  sign23.position.set(-6.5, 0.85, -7.6);
   sign23.rotation.y = 0.6;
   pathGroup.add(sign23);
 
@@ -1012,9 +1012,9 @@ export function createIslandTerrain(): THREE.Group {
   });
 
   // Terrace 4: West Terrace (Ancient Ruins & Fork / Tiles 23-31)
-  const plazaWestGeo = new THREE.BoxGeometry(7.2, 0.55, 8.5);
+  const plazaWestGeo = new THREE.BoxGeometry(7.2, 0.65, 8.5);
   const plazaWest = new THREE.Mesh(plazaWestGeo, stoneMatPlaza);
-  plazaWest.position.set(-8.5, 0.24, -2.0);
+  plazaWest.position.set(-8.5, 0.30, -2.0);
   plazaWest.receiveShadow = true;
   island.add(plazaWest);
 
@@ -1023,7 +1023,7 @@ export function createIslandTerrain(): THREE.Group {
     { pos: [0, 0.44, 9.4], size: [16.8, 0.12, 0.35] },
     { pos: [1.5, 0.94, -3.8], size: [14.2, 0.14, 0.35] },
     { pos: [5.8, 0.62, -2.5], size: [0.35, 0.14, 8.6] },
-    { pos: [-4.8, 0.54, -2.0], size: [0.35, 0.14, 8.6] }
+    { pos: [-4.8, 0.62, -2.0], size: [0.35, 0.14, 8.6] }
   ].forEach(({ pos, size }) => {
     const curb = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), curbMat);
     curb.position.set(pos[0], pos[1], pos[2]);
@@ -1037,7 +1037,7 @@ export function createIslandTerrain(): THREE.Group {
     { pos: [3.5, 0.44, 4.0], r: 1.5 },
     { pos: [-1.5, 0.44, 1.8], r: 1.8 },
     { pos: [2.0, 0.44, 1.8], r: 1.7 },
-    { pos: [-6.5, 0.54, -4.5], r: 1.4 },
+    { pos: [-3.8, 0.44, -4.5], r: 1.2 },
     { pos: [7.8, 0.62, -5.2], r: 1.5 }
   ].forEach(({ pos, r }) => {
     const moss = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.1, 0.04, 7), mossMat);
@@ -1058,6 +1058,16 @@ export function createIslandTerrain(): THREE.Group {
     if (tile.position3D) {
       const [tx, ty, tz] = tile.position3D;
       if (idx >= 13 && idx <= 17) return; // Handled by wooden boardwalk
+
+      // If tile is elevated above base courtyard, add stone pedestal supporting it
+      if (ty > 0.45) {
+        const plinthHeight = ty - 0.22;
+        const plinthGeo = new THREE.CylinderGeometry(0.74, 0.82, plinthHeight, 8);
+        const plinth = new THREE.Mesh(plinthGeo, trailMat);
+        plinth.position.set(tx, 0.22 + plinthHeight * 0.5, tz);
+        plinth.receiveShadow = true;
+        island.add(plinth);
+      }
 
       const step = new THREE.Mesh(stepGeo, trailMat);
       step.position.set(tx, ty - 0.06, tz);
@@ -1414,6 +1424,7 @@ export function createIslandTerrain(): THREE.Group {
     const rad = 11.5 + Math.random() * 3.5;
     const px = Math.cos(angle) * rad;
     const pz = Math.sin(angle) * rad;
+    if (isNearPath(px, pz, 1.4)) continue;
 
     const s = 0.45 + Math.random() * 0.75;
     dummy.position.set(px, 0.35, pz);
@@ -1441,6 +1452,7 @@ export function createIslandTerrain(): THREE.Group {
     const rad = 11.0 + Math.random() * 3.8;
     const gx = Math.cos(angle) * rad;
     const gz = Math.sin(angle) * rad;
+    if (isNearPath(gx, gz, 1.4)) continue;
 
     dummy.position.set(gx, 0.42, gz);
     dummy.rotation.set(0, Math.random() * Math.PI, 0);
@@ -1467,6 +1479,7 @@ export function createIslandTerrain(): THREE.Group {
     const rad = 11.2 + Math.random() * 3.5;
     const fx = Math.cos(angle) * rad;
     const fz = Math.sin(angle) * rad;
+    if (isNearPath(fx, fz, 1.4)) continue;
 
     dummy.position.set(fx, 0.4, fz);
     dummy.rotation.set(0, Math.random() * Math.PI, 0);
