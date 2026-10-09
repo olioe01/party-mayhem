@@ -1,6 +1,7 @@
 import React from 'react';
 import { RoomState } from '@shared/types';
 import { AVATARS } from '@shared/constants';
+import { HostArena3D } from '../host/3d/arena/HostArena3D';
 
 interface MinigameHostRendererProps {
   room: RoomState;
@@ -11,6 +12,18 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
   if (!mg) return null;
   const mgData = mg.data || {};
   const players = Object.values(room.players);
+
+  // 3D Arena minigames with gamepad controls
+  if (
+    mg.id === 'fruit-frenzy' ||
+    mg.id === 'bomb-dodge' ||
+    mg.id === 'push-arena' ||
+    mg.id === 'crown-chase' ||
+    mg.id === 'paint-panic' ||
+    mg.id === 'controller-test'
+  ) {
+    return <HostArena3D room={room} />;
+  }
 
   switch (mg.id) {
     // 1. REACTION RUSH

@@ -13,7 +13,7 @@ interface DevModePanelProps {
 export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showCharDebug, setShowCharDebug] = useState(false);
-  const [selectedMinigame, setSelectedMinigame] = useState<string>('reaction-rush');
+  const [selectedMinigame, setSelectedMinigame] = useState<string>('fruit-frenzy');
   const [selectedEvent, setSelectedEvent] = useState<string>('coin_storm');
 
   const addBot = () => {
@@ -22,6 +22,14 @@ export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
 
   const addFourBots = () => {
     for (let i = 0; i < 4; i++) {
+      setTimeout(() => {
+        socket.emit(SOCKET_EVENTS.ADD_BOT, { roomCode: room.roomCode });
+      }, i * 150);
+    }
+  };
+
+  const addFiveBots = () => {
+    for (let i = 0; i < 5; i++) {
       setTimeout(() => {
         socket.emit(SOCKET_EVENTS.ADD_BOT, { roomCode: room.roomCode });
       }, i * 150);
@@ -84,20 +92,27 @@ export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
       {/* Bot Controls */}
       <div className="flex flex-col gap-2">
         <label className="text-xs font-black uppercase tracking-wider text-slate-400">Bot Játékosok</label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-1.5">
           <button
             onClick={addBot}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-xs"
           >
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="w-3.5 h-3.5" />
             +1 Bot
           </button>
           <button
             onClick={addFourBots}
-            className="bg-indigo-700 hover:bg-indigo-600 text-white font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 text-xs"
+            className="bg-indigo-700 hover:bg-indigo-600 text-white font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-xs"
           >
-            <UserPlus className="w-4 h-4" />
-            +4 Bot (5P)
+            <UserPlus className="w-3.5 h-3.5" />
+            +4 Bot
+          </button>
+          <button
+            onClick={addFiveBots}
+            className="bg-purple-700 hover:bg-purple-600 text-white font-bold py-2 px-2 rounded-xl flex items-center justify-center gap-1 text-xs"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            +5 Bot
           </button>
         </div>
         <button
@@ -233,6 +248,22 @@ export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
                     <div className="col-span-2">3D Pos: <span className="text-cyan-300 font-mono">{pos3d}</span></div>
                     <div>ID: <span className="text-slate-500 font-mono">{p.id.slice(0, 8)}</span></div>
                     <div>Szín: <span className="text-slate-300 font-mono">{p.color}</span></div>
+                    {p.lastInputState && (
+                      <div className="col-span-2 flex items-center justify-between font-mono text-[9px] bg-slate-950/80 px-1.5 py-0.5 rounded border border-slate-700/60 mt-0.5">
+                        <span className="text-slate-400 font-bold">PAD:</span>
+                        <span className="flex items-center gap-1">
+                          <span className={p.lastInputState.up ? 'text-amber-400 font-black' : 'text-slate-600'}>▲</span>
+                          <span className={p.lastInputState.down ? 'text-amber-400 font-black' : 'text-slate-600'}>▼</span>
+                          <span className={p.lastInputState.left ? 'text-amber-400 font-black' : 'text-slate-600'}>◀</span>
+                          <span className={p.lastInputState.right ? 'text-amber-400 font-black' : 'text-slate-600'}>▶</span>
+                        </span>
+                        <span className="text-slate-600">|</span>
+                        <span className="flex items-center gap-1">
+                          <span className={p.lastInputState.a ? 'text-emerald-400 font-black' : 'text-slate-600'}>[A]</span>
+                          <span className={p.lastInputState.b ? 'text-rose-400 font-black' : 'text-slate-600'}>[B]</span>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
