@@ -8,6 +8,7 @@ import { CoinScramble2DHost } from './coinScramble/CoinScramble2DHost';
 import { TreasureGrab2DHost } from './treasureGrab/TreasureGrab2DHost';
 import { PaintPanic2DHost } from './paintPanic/PaintPanic2DHost';
 import { DeliveryDash2DHost } from './deliveryDash/DeliveryDash2DHost';
+import { FloorIsLava2DHost } from './floorIsLava/FloorIsLava2DHost';
 import { AlertTriangle } from 'lucide-react';
 
 interface MinigameHostRendererProps {
@@ -48,6 +49,11 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
   // 6. DELIVERY DASH: 2D Top-Down Courier Express
   if (mg.id === 'delivery-dash') {
     return <DeliveryDash2DHost room={room} />;
+  }
+
+  // 7. FLOOR IS LAVA: 2D Survival Grid
+  if (mg.id === 'floor-is-lava') {
+    return <FloorIsLava2DHost room={room} />;
   }
 
   // 3D Arena minigames with gamepad controls
