@@ -3,6 +3,7 @@ import { RoomState, Player } from '@shared/types';
 import { AVATARS } from '@shared/constants';
 import { HostArena3D } from '../host/3d/arena/HostArena3D';
 import { FruitFrenzy2DHost } from './fruitFrenzy/FruitFrenzy2DHost';
+import { FruitFrenzy3DHost } from './fruitFrenzy/FruitFrenzy3DHost';
 import { BombDodge2DHost } from './bombDodge/BombDodge2DHost';
 import { CoinScramble2DHost } from './coinScramble/CoinScramble2DHost';
 import { TreasureGrab2DHost } from './treasureGrab/TreasureGrab2DHost';
@@ -22,7 +23,7 @@ interface MinigameHostRendererProps {
 
 export const MINIGAME_3D_STATUS: Record<string, { ready: boolean; name: string }> = {
   'controller-test': { ready: true, name: 'Controller Test Arena 3D' },
-  'fruit-frenzy': { ready: false, name: 'Fruit Frenzy 3D' },
+  'fruit-frenzy': { ready: true, name: 'Fruit Frenzy 3D' },
   'bomb-dodge': { ready: false, name: 'Bomb Dodge 3D' },
   'coin-scramble': { ready: false, name: 'Coin Scramble 3D' },
   'treasure-grab': { ready: false, name: 'Treasure Grab 3D' },
@@ -65,8 +66,18 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
       );
     }
 
-    // 1. FRUIT FRENZY: 2D Front-View Arcade Renderer (3D option wired in Phase 5)
+    // 1. FRUIT FRENZY: 2D Arcade vs 3D Three.js Renderer
     if (mg.id === 'fruit-frenzy') {
+      if (shouldRender3D('fruit-frenzy', graphicsMode)) {
+        return (
+          <ThreeDErrorBoundary
+            minigameId="fruit-frenzy"
+            fallback={<FruitFrenzy2DHost room={room} />}
+          >
+            <FruitFrenzy3DHost room={room} />
+          </ThreeDErrorBoundary>
+        );
+      }
       return <FruitFrenzy2DHost room={room} />;
     }
 
