@@ -11,6 +11,7 @@ import { DeliveryDash2DHost } from './deliveryDash/DeliveryDash2DHost';
 import { FloorIsLava2DHost } from './floorIsLava/FloorIsLava2DHost';
 import { MonsterEscape2DHost } from './monsterEscape/MonsterEscape2DHost';
 import { PushArena2DHost } from './pushArena/PushArena2DHost';
+import { CrownChase2DHost } from './crownChase/CrownChase2DHost';
 import { AlertTriangle } from 'lucide-react';
 
 interface MinigameHostRendererProps {
@@ -68,9 +69,13 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
     return <PushArena2DHost room={room} />;
   }
 
+  // 10. CROWN CHASE: 2D Top-Down Royal Tag
+  if (mg.id === 'crown-chase') {
+    return <CrownChase2DHost room={room} />;
+  }
+
   // 3D Arena minigames with gamepad controls
   if (
-    mg.id === 'crown-chase' ||
     mg.id === 'controller-test'
   ) {
     return <HostArena3D room={room} />;
