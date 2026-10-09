@@ -10,6 +10,7 @@ import { crownChaseMinigame } from './crownChase';
 import { paintPanicMinigame } from './paintPanic';
 import { deliveryDashMinigame } from './deliveryDash';
 import { floorIsLavaMinigame } from './floorIsLava';
+import { monsterEscapeMinigame } from './monsterEscape';
 import { controllerTestMinigame } from './controllerTest';
 
 // Helper to assign ranks and coin rewards based on score descending
@@ -48,6 +49,7 @@ export const MINIGAMES: Record<string, MinigameDefinition> = {
   'treasure-grab': treasureGrabMinigame,
   'delivery-dash': deliveryDashMinigame,
   'floor-is-lava': floorIsLavaMinigame,
+  'monster-escape': monsterEscapeMinigame,
   'push-arena': pushArenaMinigame,
   'crown-chase': crownChaseMinigame,
   'paint-panic': paintPanicMinigame,

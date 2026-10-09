@@ -9,6 +9,7 @@ import { TreasureGrab2DHost } from './treasureGrab/TreasureGrab2DHost';
 import { PaintPanic2DHost } from './paintPanic/PaintPanic2DHost';
 import { DeliveryDash2DHost } from './deliveryDash/DeliveryDash2DHost';
 import { FloorIsLava2DHost } from './floorIsLava/FloorIsLava2DHost';
+import { MonsterEscape2DHost } from './monsterEscape/MonsterEscape2DHost';
 import { AlertTriangle } from 'lucide-react';
 
 interface MinigameHostRendererProps {
@@ -54,6 +55,11 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
   // 7. FLOOR IS LAVA: 2D Survival Grid
   if (mg.id === 'floor-is-lava') {
     return <FloorIsLava2DHost room={room} />;
+  }
+
+  // 8. MONSTER ESCAPE: 2D Horror Arcade Chaser
+  if (mg.id === 'monster-escape') {
+    return <MonsterEscape2DHost room={room} />;
   }
 
   // 3D Arena minigames with gamepad controls
