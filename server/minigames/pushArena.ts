@@ -175,7 +175,7 @@ export const pushArenaMinigame: MinigameDefinition = {
 
   update(room: RoomState, dt: number): boolean {
     const mgData = room.activeMinigame?.data;
-    if (!mgData) return false;
+    if (!mgData || !mgData.players) return false;
 
     const players = Object.values(mgData.players as Record<string, PushArenaPlayerSim>);
 

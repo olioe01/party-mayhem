@@ -168,7 +168,7 @@ export const crownChaseMinigame: MinigameDefinition = {
 
   update(room: RoomState, dt: number): boolean {
     const mgData = room.activeMinigame?.data;
-    if (!mgData) return false;
+    if (!mgData || !mgData.players) return false;
 
     const currentHolderId = mgData.currentCrownHolder;
     const holder = currentHolderId ? (mgData.players[currentHolderId] as CrownPlayerSim) : null;

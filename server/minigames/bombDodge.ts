@@ -102,9 +102,9 @@ export const bombDodgeMinigame: MinigameDefinition = {
 
   update(room: RoomState, dt: number): boolean {
     const mgData = room.activeMinigame?.data;
-    if (!mgData) return false;
+    if (!mgData || !mgData.players || !Array.isArray(mgData.hazards)) return false;
 
-    const timeRemaining = room.activeMinigame!.timeRemaining;
+    const timeRemaining = room.activeMinigame?.timeRemaining ?? 40;
     const progress = Math.max(0, 1 - timeRemaining / 40);
 
     // Wave spawning: bombs MUST spawn in solo and multi-player alike!

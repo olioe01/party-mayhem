@@ -125,9 +125,9 @@ export const fruitFrenzyMinigame: MinigameDefinition = {
 
   update(room: RoomState, dt: number): boolean {
     const mgData = room.activeMinigame?.data;
-    if (!mgData) return false;
+    if (!mgData || !mgData.players || !Array.isArray(mgData.items)) return false;
 
-    const timeRemaining = room.activeMinigame!.timeRemaining;
+    const timeRemaining = room.activeMinigame?.timeRemaining ?? 45;
     const totalDuration = 45;
     const progress = Math.min(1, Math.max(0, 1 - timeRemaining / totalDuration)); // 0 to 1
     mgData.matchProgress = progress;
@@ -260,8 +260,9 @@ export const fruitFrenzyMinigame: MinigameDefinition = {
 
     // 3. Update falling items and handle basket catches
     const remainingItems: FruitFrenzyItem[] = [];
+    const items = (mgData.items || []) as FruitFrenzyItem[];
 
-    mgData.items.forEach((item: FruitFrenzyItem) => {
+    items.forEach((item: FruitFrenzyItem) => {
       item.y += item.speed * dt;
 
       // Basket catch zone (Y between 860 and 945)

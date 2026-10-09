@@ -592,6 +592,11 @@ export class GameEngine {
 
   // Start Minigame Intro & Instructions (Waiting for all players to press READY)
   public startMinigameIntro(room: RoomState, specificMinigameId?: string) {
+    if (this.minigameInterval) {
+      clearInterval(this.minigameInterval);
+      this.minigameInterval = null;
+    }
+
     // In random party mode, only select games marked READY
     const readyMinigameKeys = Object.keys(MINIGAMES).filter(k => MINIGAMES[k]?.status === 'READY');
     const availableKeys = readyMinigameKeys.length > 0 ? readyMinigameKeys : ['fruit-frenzy'];
@@ -688,7 +693,7 @@ export class GameEngine {
       if (room.isPaused) return;
 
       const dt = stepMs / 1000;
-      if (room.activeMinigame) {
+      if (room.activeMinigame && room.phase === 'MINIGAME_PLAY') {
         room.activeMinigame.timeRemaining = Math.max(0, room.activeMinigame.timeRemaining - dt);
         const endedEarly = mgDef.update(room, dt);
 
@@ -696,6 +701,11 @@ export class GameEngine {
           this.endMinigame(room, mgDef);
         } else {
           this.onStateChange(room);
+        }
+      } else if (room.phase !== 'MINIGAME_PLAY') {
+        if (this.minigameInterval) {
+          clearInterval(this.minigameInterval);
+          this.minigameInterval = null;
         }
       }
     }, stepMs);

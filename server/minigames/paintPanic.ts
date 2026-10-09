@@ -119,7 +119,7 @@ export const paintPanicMinigame: MinigameDefinition = {
 
   update(room: RoomState, dt: number): boolean {
     const mgData = room.activeMinigame?.data;
-    if (!mgData) return false;
+    if (!mgData || !mgData.players || !Array.isArray(mgData.cells)) return false;
 
     const simPlayers = mgData.players as Record<string, Minigame2DPlayer>;
     const cells: number[] = mgData.cells;

@@ -150,7 +150,7 @@ export const monsterEscapeMinigame: MinigameDefinition = {
 
   update(room: RoomState, dt: number): boolean {
     const mgData = room.activeMinigame?.data;
-    if (!mgData) return false;
+    if (!mgData || !mgData.players || !mgData.monster || !Array.isArray(mgData.crystals)) return false;
 
     const simPlayers = mgData.players as Record<string, Minigame2DPlayer & { sprintTimer?: number; sprintCooldown?: number }>;
     const monster = mgData.monster as MonsterSim;
