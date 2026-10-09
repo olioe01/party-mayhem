@@ -10,6 +10,19 @@ interface DevModePanelProps {
   room: RoomState;
 }
 
+const SOLO_READY_MINIGAMES = [
+  { id: 'fruit-frenzy', name: 'Fruit Frenzy', icon: '🍎' },
+  { id: 'bomb-dodge', name: 'Bomb Dodge', icon: '💣' },
+  { id: 'coin-scramble', name: 'Coin Scramble', icon: '🪙' },
+  { id: 'treasure-grab', name: 'Treasure Grab', icon: '💎' },
+  { id: 'paint-panic', name: 'Paint Panic', icon: '🎨' },
+  { id: 'delivery-dash', name: 'Delivery Dash', icon: '📦' },
+  { id: 'floor-is-lava', name: 'Floor Is Lava', icon: '🔥' },
+  { id: 'monster-escape', name: 'Monster Escape', icon: '👾' },
+  { id: 'push-arena', name: 'Push Arena', icon: '🥊' },
+  { id: 'crown-chase', name: 'Crown Chase', icon: '👑' },
+];
+
 export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showCharDebug, setShowCharDebug] = useState(false);
@@ -89,6 +102,40 @@ export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
         </button>
       </div>
 
+      {/* 1 HUMAN + 0 BOTS SOLO DEV PLAYLIST */}
+      <div className="flex flex-col gap-2 border border-emerald-500/30 bg-emerald-950/20 p-3 rounded-2xl">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-black uppercase tracking-wider text-emerald-400">
+            🕹️ SOLO DEV PLAYLIST (1P / 0 Bots)
+          </label>
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+            10 READY
+          </span>
+        </div>
+        <p className="text-[10px] text-slate-400">
+          Kattints bármelyikre az azonnali szóló teszteléshez (1 ember, 0 bot).
+        </p>
+        <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+          {SOLO_READY_MINIGAMES.map(mg => (
+            <button
+              key={mg.id}
+              onClick={() => {
+                socket.emit(SOCKET_EVENTS.DEV_SELECT_MINIGAME, {
+                  roomCode: room.roomCode,
+                  minigameId: mg.id,
+                });
+              }}
+              className="bg-slate-800/90 hover:bg-emerald-600 hover:text-slate-950 text-white font-bold p-2 rounded-xl text-[11px] flex items-center justify-between gap-1 border border-slate-700 hover:border-emerald-400 transition-colors shadow-sm group text-left"
+            >
+              <span className="truncate">{mg.icon} {mg.name}</span>
+              <span className="text-[8px] font-black px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400 group-hover:bg-slate-950 group-hover:text-emerald-300">
+                READY
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Bot Controls */}
       <div className="flex flex-col gap-2">
         <label className="text-xs font-black uppercase tracking-wider text-slate-400">Bot Játékosok</label>
@@ -114,53 +161,6 @@ export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
             <UserPlus className="w-3.5 h-3.5" />
             +5 Bot
           </button>
-        </div>
-        {/* Quick Acceptance Test Presets */}
-        <div className="flex flex-col gap-1.5 mt-1 border-t border-slate-800 pt-2">
-          <span className="text-[10px] font-black uppercase text-amber-400">🍎 Fruit Frenzy Gyors Teszt</span>
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              onClick={() => {
-                // Ensure 4 bots added, then launch Fruit Frenzy
-                const curCount = Object.keys(room.players).length;
-                const needed = Math.max(0, 5 - curCount);
-                for (let i = 0; i < needed; i++) {
-                  setTimeout(() => {
-                    socket.emit(SOCKET_EVENTS.ADD_BOT, { roomCode: room.roomCode });
-                  }, i * 100);
-                }
-                setTimeout(() => {
-                  socket.emit(SOCKET_EVENTS.DEV_SELECT_MINIGAME, {
-                    roomCode: room.roomCode,
-                    minigameId: 'fruit-frenzy'
-                  });
-                }, (needed + 1) * 120);
-              }}
-              className="bg-amber-600 hover:bg-amber-500 text-slate-950 font-black py-2 px-2 rounded-xl text-[11px] flex items-center justify-center gap-1 shadow"
-            >
-              🍎 1 Ember + 4 Bot
-            </button>
-            <button
-              onClick={() => {
-                const curCount = Object.keys(room.players).length;
-                const needed = Math.max(0, 5 - curCount);
-                for (let i = 0; i < needed; i++) {
-                  setTimeout(() => {
-                    socket.emit(SOCKET_EVENTS.ADD_BOT, { roomCode: room.roomCode });
-                  }, i * 100);
-                }
-                setTimeout(() => {
-                  socket.emit(SOCKET_EVENTS.DEV_SELECT_MINIGAME, {
-                    roomCode: room.roomCode,
-                    minigameId: 'fruit-frenzy'
-                  });
-                }, (needed + 1) * 120);
-              }}
-              className="bg-purple-800 hover:bg-purple-700 text-white font-black py-2 px-2 rounded-xl text-[11px] flex items-center justify-center gap-1 shadow"
-            >
-              🤖 5 Bot Szimuláció
-            </button>
-          </div>
         </div>
 
         <button
