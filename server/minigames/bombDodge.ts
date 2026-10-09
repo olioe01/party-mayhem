@@ -2,28 +2,22 @@ import { RoomState, MinigameResultEntry } from '../../shared/types';
 import { MinigameDefinition } from './types';
 import { MINIGAME_COIN_REWARDS } from '../../shared/constants';
 import {
-  ArenaPlayerSim,
-  ArenaBounds,
-  updatePlayerMovement,
-  generateBotSteering,
-} from './arenaUtils';
+  Minigame2DPlayer,
+  Bounds2D,
+  DEFAULT_2D_BOUNDS,
+  updatePlayerMovement2D,
+  generateBotSteering2D,
+} from './sim2dUtils';
 
-export interface BombHazard {
+export interface BombDodgeHazard {
   id: number;
   x: number;
-  z: number;
-  warningTime: number; // counts down from 1.1s to 0
-  exploded: boolean;
+  y: number;
   radius: number;
+  warningTime: number; // counts down from ~1.2s to 0
+  exploded: boolean;
+  explosionDuration: number; // 0.35s
 }
-
-const ARENA_BOUNDS: ArenaBounds = {
-  minX: -6.5,
-  maxX: 6.5,
-  minZ: -6.5,
-  maxZ: 6.5,
-  radius: 6.5,
-};
 
 let nextHazardId = 1;
 
@@ -32,35 +26,40 @@ export const bombDodgeMinigame: MinigameDefinition = {
   name: 'BOMB DODGE',
   description: 'Térj ki a lehulló bombák elől! Figyeld a piros figyelmeztető köröket a földön!',
   duration: 40,
-  instructions: 'MOZGÁS A D-PADDAL! Fuss ki a piros veszélyzónákból a robbanás előtt! +1 túlélési pont minden hullámért!',
+  instructions: 'D-PAD = MOZGÁS! Fuss ki a piros veszélyzónákból a robbanás előtt! +1 túlélési pont minden kikerült robbanásért!',
+  status: 'READY',
   controllerConfig: {
     layout: 'gamepad',
-    aHidden: true,
-    bHidden: true,
-    instructions: 'D-PAD = MOZGÁS',
+    aLabel: '—',
+    bLabel: '—',
+    aHidden: false,
+    bHidden: false,
+    instructions: 'D-PAD = SZABAD MOZGÁS',
   },
 
   setup(room: RoomState) {
     const playersList = Object.values(room.players);
     const total = playersList.length;
 
-    const simPlayers: Record<string, ArenaPlayerSim> = {};
+    const simPlayers: Record<string, Minigame2DPlayer> = {};
     const scores: Record<string, number> = {};
 
     playersList.forEach((p, idx) => {
+      // Spread players around the arena center
       const angle = (idx / Math.max(1, total)) * Math.PI * 2;
+      const dist = total > 1 ? 260 : 0; // solo player starts right at center
       simPlayers[p.id] = {
         id: p.id,
         name: p.name,
         color: p.color || '#3b82f6',
         isBot: Boolean(p.isBot),
-        x: Math.cos(angle) * 3.5,
-        z: Math.sin(angle) * 3.5,
+        x: 960 + Math.cos(angle) * dist,
+        y: 540 + Math.sin(angle) * dist,
         vx: 0,
-        vz: 0,
+        vy: 0,
         facing: 0,
-        speed: 5.8,
-        radius: 0.55,
+        speed: 520,
+        radius: 34,
         score: 0,
         isHit: false,
         hitTimer: 0,
@@ -71,15 +70,17 @@ export const bombDodgeMinigame: MinigameDefinition = {
     room.activeMinigame!.data = {
       players: simPlayers,
       scores,
-      hazards: [] as BombHazard[],
-      waveTimer: 0.5,
+      hazards: [] as BombDodgeHazard[],
+      waveTimer: 0.8, // first wave triggers quickly (0.8s)
       waveCount: 0,
+      recentExplosions: [] as { x: number; y: number; radius: number; timestamp: number }[],
     };
   },
 
   start(room: RoomState) {
     if (!room.activeMinigame?.data) return;
     room.activeMinigame.data.hazards = [];
+    room.activeMinigame.data.waveTimer = 1.0;
   },
 
   handleInput(room: RoomState, playerId: string, data: any) {
@@ -106,70 +107,93 @@ export const bombDodgeMinigame: MinigameDefinition = {
     const timeRemaining = room.activeMinigame!.timeRemaining;
     const progress = Math.max(0, 1 - timeRemaining / 40);
 
-    // Wave spawning: spawn 2-5 bomb hazards
+    // Wave spawning: bombs MUST spawn in solo and multi-player alike!
     mgData.waveTimer = (mgData.waveTimer || 0) + dt;
-    const waveInterval = Math.max(1.3, 2.2 - progress * 0.9);
+    const waveInterval = Math.max(1.2, 2.1 - progress * 0.8);
 
     if (mgData.waveTimer >= waveInterval) {
       mgData.waveTimer = 0;
       mgData.waveCount = (mgData.waveCount || 0) + 1;
 
-      const bombCount = Math.floor(2 + progress * 4);
+      // Spawn 2 to 5 bombs per wave across the arena [200, 1720] x [180, 900]
+      const bombCount = Math.floor(2 + progress * 3.5);
       for (let i = 0; i < bombCount; i++) {
-        const rad = Math.random() * (ARENA_BOUNDS.radius! - 1.2);
-        const ang = Math.random() * Math.PI * 2;
+        const bx = 240 + Math.random() * 1440;
+        const by = 200 + Math.random() * 680;
         mgData.hazards.push({
           id: nextHazardId++,
-          x: Math.cos(ang) * rad,
-          z: Math.sin(ang) * rad,
+          x: bx,
+          y: by,
+          radius: 135 + Math.random() * 30,
           warningTime: 1.15 - progress * 0.25,
           exploded: false,
-          radius: 1.75,
+          explosionDuration: 0.35,
         });
       }
     }
 
-    // Update hazards
-    const activeHazards: BombHazard[] = [];
-    mgData.hazards.forEach((hazard: BombHazard) => {
-      hazard.warningTime -= dt;
-      if (hazard.warningTime <= 0 && !hazard.exploded) {
-        hazard.exploded = true;
-        // Check which players got caught in explosion radius
-        Object.values(mgData.players as Record<string, ArenaPlayerSim>).forEach(p => {
-          const dist = Math.hypot(p.x - hazard.x, p.z - hazard.z);
-          if (dist <= hazard.radius + p.radius) {
-            p.isHit = true;
-            p.hitTimer = 0.8;
-            p.score = Math.max(0, p.score - 1);
-            mgData.scores[p.id] = p.score;
-          } else {
-            // Survived this explosion
-            p.score += 1;
-            mgData.scores[p.id] = p.score;
-          }
-        });
-      }
+    // Update active hazards
+    const activeHazards: BombDodgeHazard[] = [];
+    const simPlayers = mgData.players as Record<string, Minigame2DPlayer>;
 
-      // Keep for 0.4s explosion animation
-      if (hazard.warningTime > -0.4) {
+    mgData.hazards.forEach((hazard: BombDodgeHazard) => {
+      if (!hazard.exploded) {
+        hazard.warningTime -= dt;
+
+        if (hazard.warningTime <= 0) {
+          // EXPLODE!
+          hazard.exploded = true;
+          mgData.recentExplosions.push({
+            x: hazard.x,
+            y: hazard.y,
+            radius: hazard.radius,
+            timestamp: Date.now(),
+          });
+
+          // Check collisions with all players
+          Object.values(simPlayers).forEach(p => {
+            const dist = Math.hypot(p.x - hazard.x, p.y - hazard.y);
+            if (dist <= hazard.radius + p.radius) {
+              // Player got caught in explosion!
+              p.isHit = true;
+              p.hitTimer = 0.8;
+              p.score = Math.max(0, p.score - 1);
+              mgData.scores[p.id] = p.score;
+            } else {
+              // Successfully survived this explosion
+              p.score += 1;
+              mgData.scores[p.id] = p.score;
+            }
+          });
+        }
         activeHazards.push(hazard);
+      } else {
+        // Explosion flash active for 0.35s
+        hazard.explosionDuration -= dt;
+        if (hazard.explosionDuration > 0) {
+          activeHazards.push(hazard);
+        }
       }
     });
+
     mgData.hazards = activeHazards;
 
-    // Update players & bot AI
-    Object.values(mgData.players as Record<string, ArenaPlayerSim>).forEach((playerSim: any) => {
-      let input = playerSim.lastInput;
+    // Prune old explosions
+    const now = Date.now();
+    mgData.recentExplosions = (mgData.recentExplosions || []).filter((e: any) => now - e.timestamp < 1000);
 
-      if (playerSim.isBot) {
-        // Bots identify nearest warning circle threat and steer safely away
-        let threat: BombHazard | null = null;
-        let threatDist = 999;
+    // Update players movement & Bot AI
+    Object.values(simPlayers).forEach(sim => {
+      let input = sim.lastInput;
 
-        mgData.hazards.forEach((h: BombHazard) => {
+      if (sim.isBot) {
+        // Bot evasion: identify closest active warning circle
+        let threat: BombDodgeHazard | null = null;
+        let threatDist = 9999;
+
+        mgData.hazards.forEach((h: BombDodgeHazard) => {
           if (!h.exploded) {
-            const d = Math.hypot(h.x - playerSim.x, h.z - playerSim.z);
+            const d = Math.hypot(h.x - sim.x, h.y - sim.y);
             if (d < threatDist) {
               threatDist = d;
               threat = h;
@@ -177,12 +201,12 @@ export const bombDodgeMinigame: MinigameDefinition = {
           }
         });
 
-        const avoidX = threat && threatDist < 3.0 ? (threat as BombHazard).x : undefined;
-        const avoidZ = threat && threatDist < 3.0 ? (threat as BombHazard).z : undefined;
-        input = generateBotSteering(playerSim, 0, 0, avoidX, avoidZ, 3.2);
+        const avoidX = threat && threatDist < 260 ? (threat as BombDodgeHazard).x : undefined;
+        const avoidY = threat && threatDist < 260 ? (threat as BombDodgeHazard).y : undefined;
+        input = generateBotSteering2D(sim, 960, 540, avoidX, avoidY, 260);
       }
 
-      updatePlayerMovement(playerSim, input, dt, ARENA_BOUNDS);
+      updatePlayerMovement2D(sim, input, dt, DEFAULT_2D_BOUNDS);
     });
 
     return false;

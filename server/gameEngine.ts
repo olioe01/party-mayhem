@@ -592,10 +592,11 @@ export class GameEngine {
 
   // Start Minigame Intro & Instructions (Waiting for all players to press READY)
   public startMinigameIntro(room: RoomState, specificMinigameId?: string) {
-    this.clearAllTimers();
-    const minigameKeys = Object.keys(MINIGAMES);
-    const chosenId = specificMinigameId || minigameKeys[Math.floor(Math.random() * minigameKeys.length)];
-    const mgDef = MINIGAMES[chosenId] || MINIGAMES['reaction-rush'];
+    // In random party mode, only select games marked READY
+    const readyMinigameKeys = Object.keys(MINIGAMES).filter(k => MINIGAMES[k]?.status === 'READY');
+    const availableKeys = readyMinigameKeys.length > 0 ? readyMinigameKeys : ['fruit-frenzy'];
+    const chosenId = specificMinigameId || availableKeys[Math.floor(Math.random() * availableKeys.length)];
+    const mgDef = MINIGAMES[chosenId] || MINIGAMES['fruit-frenzy'];
 
     // Reset minigame ready state & input state for every player in the room
     Object.values(room.players).forEach(p => {

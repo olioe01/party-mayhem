@@ -217,26 +217,63 @@ export const MinigameCanvas2D: React.FC<MinigameCanvas2DProps> = ({
         style={{ imageRendering: 'auto' }}
       />
 
-      {/* DEV DIAGNOSTICS OVERLAY (if active) */}
+      {/* DEV DIAGNOSTICS OVERLAY (Always available in dev mode) */}
       {showDevOverlay && (
-        <div className="absolute bottom-3 left-3 bg-slate-900/90 border border-slate-700/80 rounded-xl px-3 py-1.5 flex items-center gap-3 text-[11px] font-mono text-slate-300 z-30 pointer-events-none backdrop-blur-md">
-          <div className="flex items-center gap-1">
-            <Activity className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="font-black text-emerald-400">{fps} FPS</span>
+        <div className="absolute bottom-2 left-2 bg-slate-950/90 border border-slate-700/80 rounded-2xl p-2.5 flex flex-col gap-1 text-[10px] font-mono text-slate-300 z-30 pointer-events-none backdrop-blur-md shadow-2xl max-w-lg">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-1">
+            <span className="font-black text-amber-400 uppercase tracking-wider">
+              {room.activeMinigame?.name || 'MINIGAME'}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold">
+                {fps} FPS
+              </span>
+              <span className="text-slate-500">•</span>
+              <span className="text-slate-400">{frameTimeMs}ms</span>
+            </div>
           </div>
-          <span>•</span>
-          <span>{frameTimeMs} ms</span>
-          <span>•</span>
-          <span>Res: 1920x1080</span>
-          {extraDevStats &&
-            Object.entries(extraDevStats).map(([key, val]) => (
-              <React.Fragment key={key}>
-                <span>•</span>
-                <span>
+
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[9px] text-slate-400">
+            <div>FÁZIS: <strong className="text-white">{room.phase}</strong></div>
+            <div>SZIMULÁCIÓ: <strong className="text-emerald-400">20 Hz</strong></div>
+            <div>JÁTÉKOSOK: <strong className="text-cyan-300">{Object.keys(room.players).length}</strong></div>
+            <div>RENDER: <strong className="text-emerald-400">AKTÍV (60 FPS)</strong></div>
+          </div>
+
+          {/* First player input state */}
+          {Object.values(room.players)[0]?.lastInputState && (
+            <div className="flex items-center justify-between text-[9px] bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+              <span className="text-slate-400 font-bold">INPUT:</span>
+              <span className="flex items-center gap-1">
+                <span className={Object.values(room.players)[0].lastInputState?.up ? 'text-amber-400 font-black' : 'text-slate-600'}>▲</span>
+                <span className={Object.values(room.players)[0].lastInputState?.down ? 'text-amber-400 font-black' : 'text-slate-600'}>▼</span>
+                <span className={Object.values(room.players)[0].lastInputState?.left ? 'text-amber-400 font-black' : 'text-slate-600'}>◀</span>
+                <span className={Object.values(room.players)[0].lastInputState?.right ? 'text-amber-400 font-black' : 'text-slate-600'}>▶</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className={Object.values(room.players)[0].lastInputState?.a ? 'text-emerald-400 font-black' : 'text-slate-600'}>[A]</span>
+                <span className={Object.values(room.players)[0].lastInputState?.b ? 'text-rose-400 font-black' : 'text-slate-600'}>[B]</span>
+              </span>
+            </div>
+          )}
+
+          {extraDevStats && (
+            <div className="flex flex-wrap gap-x-2 gap-y-0.5 border-t border-slate-800 pt-1 text-[9px]">
+              {Object.entries(extraDevStats).map(([key, val]) => (
+                <span key={key}>
                   {key}: <strong className="text-amber-300">{val}</strong>
                 </span>
-              </React.Fragment>
-            ))}
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SOLO TEST MODE BADGE */}
+      {Object.values(room.players).length === 1 && !Object.values(room.players)[0]?.isBot && (
+        <div className="absolute top-2 right-4 bg-purple-950/85 border border-purple-500/80 rounded-xl px-3 py-1 text-[11px] font-black text-purple-200 z-30 pointer-events-none shadow-xl flex items-center gap-1.5">
+          <span>🎮</span>
+          <span>SOLO TEST MODE (1 Játékos • 0 Bot)</span>
         </div>
       )}
     </div>

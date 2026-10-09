@@ -6,6 +6,7 @@ export interface MinigameDefinition {
   description: string;
   duration: number; // in seconds
   instructions: string;
+  status?: 'READY' | 'DEVELOPMENT';
   controllerConfig?: MinigameControllerConfig;
   setup: (room: RoomState) => void;
   start: (room: RoomState) => void;

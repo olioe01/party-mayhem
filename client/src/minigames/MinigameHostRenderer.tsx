@@ -1,8 +1,9 @@
 import React from 'react';
-import { RoomState } from '@shared/types';
+import { RoomState, Player } from '@shared/types';
 import { AVATARS } from '@shared/constants';
 import { HostArena3D } from '../host/3d/arena/HostArena3D';
 import { FruitFrenzy2DHost } from './fruitFrenzy/FruitFrenzy2DHost';
+import { BombDodge2DHost } from './bombDodge/BombDodge2DHost';
 import { AlertTriangle } from 'lucide-react';
 
 interface MinigameHostRendererProps {
@@ -15,14 +16,18 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
   const mgData = mg.data || {};
   const players = Object.values(room.players);
 
-  // 1. FRUIT FRENZY: Dedicated 2D Front-View Arcade Renderer
+  // 1. FRUIT FRENZY: 2D Front-View Arcade Renderer
   if (mg.id === 'fruit-frenzy') {
     return <FruitFrenzy2DHost room={room} />;
   }
 
+  // 2. BOMB DODGE: 2D Top-Down Arena Renderer
+  if (mg.id === 'bomb-dodge') {
+    return <BombDodge2DHost room={room} />;
+  }
+
   // 3D Arena minigames with gamepad controls
   if (
-    mg.id === 'bomb-dodge' ||
     mg.id === 'push-arena' ||
     mg.id === 'crown-chase' ||
     mg.id === 'paint-panic' ||

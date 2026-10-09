@@ -44,6 +44,7 @@ export const fruitFrenzyMinigame: MinigameDefinition = {
   description: 'Kapd el a hulló finom gyümölcsöket a kosárral, és kerüld el a bombákat!',
   duration: 45,
   instructions: 'D-PAD BAL/JOBB = MOZGÁS! Alma/narancs: +1 🍎, Arany: +3 🌟, Csillag: +5 💎! BOMBA: -3 pont! 💣',
+  status: 'READY',
   controllerConfig: {
     layout: 'gamepad',
     aLabel: '—',
