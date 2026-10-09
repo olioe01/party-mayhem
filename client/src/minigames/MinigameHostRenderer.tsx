@@ -10,6 +10,7 @@ import { PaintPanic2DHost } from './paintPanic/PaintPanic2DHost';
 import { DeliveryDash2DHost } from './deliveryDash/DeliveryDash2DHost';
 import { FloorIsLava2DHost } from './floorIsLava/FloorIsLava2DHost';
 import { MonsterEscape2DHost } from './monsterEscape/MonsterEscape2DHost';
+import { PushArena2DHost } from './pushArena/PushArena2DHost';
 import { AlertTriangle } from 'lucide-react';
 
 interface MinigameHostRendererProps {
@@ -62,9 +63,13 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
     return <MonsterEscape2DHost room={room} />;
   }
 
+  // 9. PUSH ARENA: 2D Top-Down Sumo Ring
+  if (mg.id === 'push-arena') {
+    return <PushArena2DHost room={room} />;
+  }
+
   // 3D Arena minigames with gamepad controls
   if (
-    mg.id === 'push-arena' ||
     mg.id === 'crown-chase' ||
     mg.id === 'controller-test'
   ) {
