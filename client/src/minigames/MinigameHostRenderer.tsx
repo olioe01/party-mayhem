@@ -7,6 +7,7 @@ import { BombDodge2DHost } from './bombDodge/BombDodge2DHost';
 import { CoinScramble2DHost } from './coinScramble/CoinScramble2DHost';
 import { TreasureGrab2DHost } from './treasureGrab/TreasureGrab2DHost';
 import { PaintPanic2DHost } from './paintPanic/PaintPanic2DHost';
+import { DeliveryDash2DHost } from './deliveryDash/DeliveryDash2DHost';
 import { AlertTriangle } from 'lucide-react';
 
 interface MinigameHostRendererProps {
@@ -42,6 +43,11 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
   // 5. PAINT PANIC: 2D Top-Down Territory Painter
   if (mg.id === 'paint-panic') {
     return <PaintPanic2DHost room={room} />;
+  }
+
+  // 6. DELIVERY DASH: 2D Top-Down Courier Express
+  if (mg.id === 'delivery-dash') {
+    return <DeliveryDash2DHost room={room} />;
   }
 
   // 3D Arena minigames with gamepad controls

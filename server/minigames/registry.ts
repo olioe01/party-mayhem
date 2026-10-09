@@ -8,6 +8,7 @@ import { treasureGrabMinigame } from './treasureGrab';
 import { pushArenaMinigame } from './pushArena';
 import { crownChaseMinigame } from './crownChase';
 import { paintPanicMinigame } from './paintPanic';
+import { deliveryDashMinigame } from './deliveryDash';
 import { controllerTestMinigame } from './controllerTest';
 
 // Helper to assign ranks and coin rewards based on score descending
@@ -44,6 +45,7 @@ export const MINIGAMES: Record<string, MinigameDefinition> = {
   'bomb-dodge': bombDodgeMinigame,
   'coin-scramble': coinScrambleMinigame,
   'treasure-grab': treasureGrabMinigame,
+  'delivery-dash': deliveryDashMinigame,
   'push-arena': pushArenaMinigame,
   'crown-chase': crownChaseMinigame,
   'paint-panic': paintPanicMinigame,
