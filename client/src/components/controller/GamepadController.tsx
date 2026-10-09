@@ -57,19 +57,47 @@ export const GamepadController: React.FC<GamepadControllerProps> = ({
     });
   }, [room.roomCode]);
 
-  // Clean disconnect safety: reset inputs when unmounting
+  const clearAllInputs = useCallback(() => {
+    const cleared: GamepadInputState = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      a: false,
+      b: false,
+    };
+    const cur = inputStateRef.current;
+    if (cur.up || cur.down || cur.left || cur.right || cur.a || cur.b) {
+      inputStateRef.current = cleared;
+      sendInputState(cleared);
+    }
+  }, [sendInputState]);
+
+  // Clean disconnect & unmount safety
   useEffect(() => {
     return () => {
-      sendInputState({
-        up: false,
-        down: false,
-        left: false,
-        right: false,
-        a: false,
-        b: false,
-      });
+      clearAllInputs();
     };
-  }, [sendInputState]);
+  }, [clearAllInputs]);
+
+  // Visibility change & window blur safety (clears held inputs if phone app goes to background)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        clearAllInputs();
+      }
+    };
+    const handleBlur = () => {
+      clearAllInputs();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [clearAllInputs]);
 
   const handleDirectionChange = (dirs: { up: boolean; down: boolean; left: boolean; right: boolean }) => {
     const cur = inputStateRef.current;
@@ -102,27 +130,35 @@ export const GamepadController: React.FC<GamepadControllerProps> = ({
   };
 
   const avatar = AVATARS[player.avatar] || AVATARS['fox'];
-  const aLabel = config?.aLabel || 'AKCIÓ';
-  const bLabel = config?.bLabel || 'KÜLÖNLEGES';
-  const aHidden = Boolean(config?.aHidden);
-  const bHidden = Boolean(config?.bHidden);
+  const aDisabled = Boolean(config?.aHidden);
+  const bDisabled = Boolean(config?.bHidden);
+  const aLabel = aDisabled ? '—' : (config?.aLabel || 'AKCIÓ');
+  const bLabel = bDisabled ? '—' : (config?.bLabel || 'KÜLÖNLEGES');
 
   return (
     <div
       className="fixed inset-0 w-screen h-screen bg-slate-950 text-white select-none touch-none overscroll-none overflow-hidden flex flex-col justify-between"
-      style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+      style={{
+        touchAction: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)',
+        paddingRight: 'env(safe-area-inset-right, 0px)',
+      }}
     >
-      {/* PORTRAIT WARNING OVERLAY: Gentle prompt to tilt to landscape */}
+      {/* PORTRAIT WARNING OVERLAY: Prompt to tilt to landscape */}
       {!isLandscape && (
-        <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center gap-4">
-          <div className="relative w-20 h-20 flex items-center justify-center">
-            <RotateCcw className="w-16 h-16 text-amber-400 animate-spin" style={{ animationDuration: '4s' }} />
+        <div className="fixed inset-0 z-50 bg-slate-950/98 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center gap-4">
+          <div className="relative w-16 h-16 flex items-center justify-center">
+            <RotateCcw className="w-14 h-14 text-amber-400 animate-spin" style={{ animationDuration: '4s' }} />
           </div>
           <h2 className="text-2xl font-black text-white font-heading">
             FORDÍTSD EL A TELEFONT!
           </h2>
           <p className="text-sm font-bold text-slate-400 max-w-xs">
-            A játékhoz fekvő tájolás szükséges a kényelmes kétkezes irányításhoz.
+            A minijátékokhoz fekvő tájolás szükséges a kényelmes kétkezes irányításhoz.
           </p>
           <div className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-amber-300 font-mono">
             🔄 Képernyő elforgatása (Landscape)
@@ -130,86 +166,81 @@ export const GamepadController: React.FC<GamepadControllerProps> = ({
         </div>
       )}
 
-      {/* TOP COMPACT HUD */}
-      <header className="w-full px-6 py-2 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between shrink-0 z-20">
+      {/* TOP SLIM HUD */}
+      <header className="w-full h-10 px-4 py-1 bg-slate-900/90 border-b border-slate-800/80 flex items-center justify-between shrink-0 z-20">
         {/* Left: Player identity */}
         <div className="flex items-center gap-2">
-          <span className="text-xl">{avatar.emoji}</span>
-          <span className="font-extrabold text-sm truncate max-w-[120px] sm:max-w-xs" style={{ color: player.color || '#fff' }}>
+          <span className="text-lg">{avatar.emoji}</span>
+          <span className="font-extrabold text-xs sm:text-sm truncate max-w-[120px] sm:max-w-xs" style={{ color: player.color || '#fff' }}>
             {player.name}
           </span>
         </div>
 
         {/* Center: Live minigame score / info */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {scoreDisplay ? (
-            <div className="font-black text-amber-300 font-mono text-base px-3 py-0.5 rounded-lg bg-slate-800 border border-amber-400/40">
+            <div className="font-black text-amber-300 font-mono text-sm sm:text-base px-3 py-0.5 rounded-lg bg-slate-800 border border-amber-400/40">
               {scoreDisplay}
             </div>
           ) : (
-            <span className="text-xs font-black uppercase tracking-wider text-slate-400">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
               {mg?.name || 'MINIJÁTÉK'}
             </span>
           )}
         </div>
 
         {/* Right: Remaining timer */}
-        <div className="flex items-center gap-1 font-mono font-black text-amber-400 text-xs bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+        <div className="flex items-center gap-1 font-mono font-black text-amber-400 text-xs bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700">
           <Timer className="w-3.5 h-3.5" />
           <span>{mg ? Math.ceil(mg.timeRemaining) : 0}s</span>
         </div>
       </header>
 
       {/* CONTROLLER MAIN PLAY AREA */}
-      <main className="flex-1 w-full px-4 sm:px-8 py-2 flex items-center justify-between relative">
-        {/* LEFT THUMB: D-PAD */}
-        <section className="flex items-center justify-center p-2 z-20" aria-label="D-Pad">
+      <main className="flex-1 w-full h-full px-2 sm:px-6 py-1 flex items-center justify-between relative overflow-hidden">
+        {/* LEFT THUMB: D-PAD (~45% width) */}
+        <section className="w-[45%] h-full flex items-center justify-center p-1 z-20" aria-label="D-Pad">
           <DPad onDirectionChange={handleDirectionChange} />
         </section>
 
-        {/* CENTER DECORATIVE LOGO / GAMEPAD BADGE */}
-        <section className="hidden md:flex flex-col items-center justify-center pointer-events-none opacity-30 select-none">
-          <span className="text-xs font-black tracking-widest uppercase text-slate-500 font-mono">
-            PARTY MAYHEM
-          </span>
-          <span className="text-[10px] text-slate-600 font-bold">
-            WIRELESS CONTROLLER
+        {/* CENTER DECORATIVE GAP (~10% width) */}
+        <section className="w-[10%] flex flex-col items-center justify-center pointer-events-none opacity-30 select-none">
+          <span className="text-[10px] font-black tracking-widest uppercase text-slate-500 font-mono text-center">
+            PARTY<br />MAYHEM
           </span>
         </section>
 
-        {/* RIGHT THUMB: ACTION BUTTONS (A / B) */}
-        <section className="flex items-center justify-center gap-4 sm:gap-6 p-2 z-20" aria-label="Action Buttons">
-          {/* B Button (Secondary) */}
-          {!bHidden && (
-            <div className="flex flex-col items-center">
-              <ActionButton
-                label="B"
-                subLabel={bLabel}
-                colorScheme="secondary"
-                disabled={bHidden}
-                onChange={handleBChange}
-              />
-            </div>
-          )}
+        {/* RIGHT THUMB: ACTION BUTTONS (~45% width) */}
+        <section className="w-[45%] h-full flex items-center justify-center gap-3 sm:gap-6 p-1 z-20" aria-label="Action Buttons">
+          {/* B Button (Secondary, lower-left) */}
+          <div className="flex flex-col items-center translate-y-3 sm:translate-y-4">
+            <ActionButton
+              label="B"
+              subLabel={bLabel}
+              colorScheme="secondary"
+              size="medium"
+              disabled={bDisabled}
+              onChange={handleBChange}
+            />
+          </div>
 
-          {/* A Button (Primary) */}
-          {!aHidden && (
-            <div className="flex flex-col items-center translate-y-[-12px] sm:translate-y-[-16px]">
-              <ActionButton
-                label="A"
-                subLabel={aLabel}
-                colorScheme="primary"
-                disabled={aHidden}
-                onChange={handleAChange}
-              />
-            </div>
-          )}
+          {/* A Button (Primary, upper-right, larger) */}
+          <div className="flex flex-col items-center -translate-y-3 sm:-translate-y-4">
+            <ActionButton
+              label="A"
+              subLabel={aLabel}
+              colorScheme="primary"
+              size="large"
+              disabled={aDisabled}
+              onChange={handleAChange}
+            />
+          </div>
         </section>
       </main>
 
-      {/* BOTTOM SLIM BAR */}
-      <footer className="w-full py-1 px-4 bg-slate-950/80 border-t border-slate-900 flex items-center justify-center text-[10px] text-slate-500 font-bold tracking-tight">
-        <span>🎮 Bal kéz: D-pad mozgatás • Jobb kéz: Gombok</span>
+      {/* BOTTOM ULTRA-SLIM FOOTER */}
+      <footer className="w-full h-5 px-3 bg-slate-950 border-t border-slate-900/80 flex items-center justify-center text-[9px] text-slate-500 font-bold tracking-tight shrink-0">
+        <span>🎮 Bal hüvelykujj: D-pad • Jobb hüvelykujj: Gombok</span>
       </footer>
     </div>
   );

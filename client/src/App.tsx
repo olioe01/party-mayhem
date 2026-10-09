@@ -5,7 +5,8 @@ import { SOCKET_EVENTS } from '@shared/events';
 import { HostView } from './host/HostView';
 import { PlayerView } from './player/PlayerView';
 import { NetworkTest } from './network/NetworkTest';
-import { Tv, Smartphone, Sparkles, Activity } from 'lucide-react';
+import { ControllerTestScreen } from './components/controller/ControllerTestScreen';
+import { Tv, Smartphone, Sparkles, Activity, Gamepad2 } from 'lucide-react';
 import { sounds } from './audio/soundSynth';
 
 export function App() {
@@ -18,11 +19,12 @@ export function App() {
   const roomCodeParam = searchParams.get('room') || '4827';
   
   const isNetworkTest = path === '/network-test' || searchParams.has('network-test');
+  const isControllerTest = path === '/controller-test' || searchParams.has('controller-test');
   const isExplicitHost = path === '/host' || searchParams.has('host');
   const isExplicitPlayer = path === '/join' || path === '/play' || searchParams.has('join') || searchParams.has('player');
 
-  const [mode, setMode] = useState<'host' | 'player' | 'select' | 'network-test'>(
-    isNetworkTest ? 'network-test' : isExplicitHost ? 'host' : isExplicitPlayer ? 'player' : 'select'
+  const [mode, setMode] = useState<'host' | 'player' | 'select' | 'network-test' | 'controller-test'>(
+    isControllerTest ? 'controller-test' : isNetworkTest ? 'network-test' : isExplicitHost ? 'host' : isExplicitPlayer ? 'player' : 'select'
   );
 
   useEffect(() => {
@@ -40,6 +42,10 @@ export function App() {
       socket.off(SOCKET_EVENTS.ROOM_STATE, handleRoomState);
     };
   }, []);
+
+  if (mode === 'controller-test') {
+    return <ControllerTestScreen />;
+  }
 
   if (mode === 'network-test') {
     return <NetworkTest />;
@@ -113,17 +119,28 @@ export function App() {
               </div>
             </button>
 
-            {/* Network diagnostic link */}
-            <div className="pt-2 flex justify-center">
+            {/* Diagnostic links */}
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => {
+                  setMode('controller-test');
+                  window.history.pushState({}, '', '/controller-test');
+                }}
+                className="text-xs text-amber-400 hover:text-amber-300 font-mono flex items-center gap-1.5 transition bg-slate-900 px-3 py-1.5 rounded-xl border border-amber-500/30"
+              >
+                <Gamepad2 className="w-3.5 h-3.5" />
+                <span>Kontroller Teszt (/controller-test)</span>
+              </button>
+
               <button
                 onClick={() => {
                   setMode('network-test');
                   window.history.pushState({}, '', '/network-test');
                 }}
-                className="text-xs text-slate-400 hover:text-cyan-400 font-mono flex items-center gap-1.5 transition"
+                className="text-xs text-slate-400 hover:text-cyan-400 font-mono flex items-center gap-1.5 transition px-2 py-1.5"
               >
                 <Activity className="w-3.5 h-3.5" />
-                <span>LAN Kapcsolat Tesztelése (/network-test)</span>
+                <span>LAN Teszt</span>
               </button>
             </div>
           </div>
