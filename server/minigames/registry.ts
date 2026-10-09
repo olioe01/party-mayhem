@@ -4,6 +4,7 @@ import { MINIGAME_COIN_REWARDS } from '../../shared/constants';
 import { fruitFrenzyMinigame } from './fruitFrenzy';
 import { bombDodgeMinigame } from './bombDodge';
 import { coinScrambleMinigame } from './coinScramble';
+import { treasureGrabMinigame } from './treasureGrab';
 import { pushArenaMinigame } from './pushArena';
 import { crownChaseMinigame } from './crownChase';
 import { paintPanicMinigame } from './paintPanic';
@@ -42,6 +43,7 @@ export const MINIGAMES: Record<string, MinigameDefinition> = {
   'fruit-frenzy': fruitFrenzyMinigame,
   'bomb-dodge': bombDodgeMinigame,
   'coin-scramble': coinScrambleMinigame,
+  'treasure-grab': treasureGrabMinigame,
   'push-arena': pushArenaMinigame,
   'crown-chase': crownChaseMinigame,
   'paint-panic': paintPanicMinigame,
