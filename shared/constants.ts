@@ -338,8 +338,9 @@ export interface MinigameMeta {
 }
 
 export const MINIGAME_META_LIST: MinigameMeta[] = [
-  { id: 'fruit-frenzy', name: 'Fruit Frenzy (3D Arena)', description: 'Kapd el a hulló gyümölcsöket kosárral a D-paddal!', instructions: 'D-PAD = MOZGÁS! Kerüld a bombákat (-3), kapd el az aranyalmát (+3)!' },
-  { id: 'bomb-dodge', name: 'Bomb Dodge (3D Arena)', description: 'Térj ki a lehulló bombák és robbanások elől a D-paddal!', instructions: 'D-PAD = MOZGÁS! Fuss ki a piros veszélyzónákból a robbanás előtt!' },
+  { id: 'fruit-frenzy', name: 'Fruit Frenzy (2D Front-View)', description: 'Kapd el a hulló gyümölcsöket kosárral a D-paddal!', instructions: 'D-PAD = MOZGÁS! Kerüld a bombákat (-3), kapd el az aranyalmát (+3)!' },
+  { id: 'bomb-dodge', name: 'Bomb Dodge (2D Arena)', description: 'Térj ki a lehulló bombák és robbanások elől a D-paddal!', instructions: 'D-PAD = MOZGÁS! Fuss ki a piros veszélyzónákból a robbanás előtt!' },
+  { id: 'coin-scramble', name: 'Coin Scramble (2D Arena)', description: 'Gyűjtsd be a legtöbb érmét az arénában a D-paddal!', instructions: 'D-PAD = MOZGÁS! +1 érme, +5 aranycsillag, -3 elátkozott koponya!' },
   { id: 'push-arena', name: 'Push Arena (3D Arena)', description: 'Lökd le az ellenfeleket a lebegő arénáról!', instructions: 'D-PAD = MOZGÁS • [A] = LÖKÉS • [B] = DASH!' },
   { id: 'crown-chase', name: 'Crown Chase (3D Arena)', description: 'Tartsd meg a koronát a legtovább!', instructions: 'D-PAD = MOZGÁS! Érj a koronáshoz a lopáshoz, majd menekülj!' },
   { id: 'paint-panic', name: 'Paint Panic (3D Arena)', description: 'Fesd le a padlót a saját színeddel a D-paddal!', instructions: 'D-PAD = MOZGÁS! Ahol jársz, felveszi a színedet!' },

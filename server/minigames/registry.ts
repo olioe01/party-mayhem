@@ -3,6 +3,7 @@ import { MinigameDefinition } from './types';
 import { MINIGAME_COIN_REWARDS } from '../../shared/constants';
 import { fruitFrenzyMinigame } from './fruitFrenzy';
 import { bombDodgeMinigame } from './bombDodge';
+import { coinScrambleMinigame } from './coinScramble';
 import { pushArenaMinigame } from './pushArena';
 import { crownChaseMinigame } from './crownChase';
 import { paintPanicMinigame } from './paintPanic';
@@ -40,6 +41,7 @@ export const MINIGAMES: Record<string, MinigameDefinition> = {
   // CORE ARENA GAMEPAD MINIGAMES
   'fruit-frenzy': fruitFrenzyMinigame,
   'bomb-dodge': bombDodgeMinigame,
+  'coin-scramble': coinScrambleMinigame,
   'push-arena': pushArenaMinigame,
   'crown-chase': crownChaseMinigame,
   'paint-panic': paintPanicMinigame,

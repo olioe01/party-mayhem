@@ -4,6 +4,7 @@ import { AVATARS } from '@shared/constants';
 import { HostArena3D } from '../host/3d/arena/HostArena3D';
 import { FruitFrenzy2DHost } from './fruitFrenzy/FruitFrenzy2DHost';
 import { BombDodge2DHost } from './bombDodge/BombDodge2DHost';
+import { CoinScramble2DHost } from './coinScramble/CoinScramble2DHost';
 import { AlertTriangle } from 'lucide-react';
 
 interface MinigameHostRendererProps {
@@ -24,6 +25,11 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
   // 2. BOMB DODGE: 2D Top-Down Arena Renderer
   if (mg.id === 'bomb-dodge') {
     return <BombDodge2DHost room={room} />;
+  }
+
+  // 3. COIN SCRAMBLE: 2D Top-Down Arena Renderer
+  if (mg.id === 'coin-scramble') {
+    return <CoinScramble2DHost room={room} />;
   }
 
   // 3D Arena minigames with gamepad controls
