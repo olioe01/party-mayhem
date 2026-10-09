@@ -4,13 +4,15 @@ import { socket } from '../socket';
 import { SOCKET_EVENTS } from '@shared/events';
 import { CHAOS_EVENTS, MINIGAME_META_LIST } from '@shared/constants';
 import { BOARD_TILES } from '@shared/boardData';
-import { Wrench, UserPlus, Play, Sparkles, X, ChevronDown, Eye } from 'lucide-react';
+import { Wrench, UserPlus, Play, Sparkles, X, ChevronDown, Eye, Layers } from 'lucide-react';
+import { useGraphicsMode, GraphicsMode } from '../minigames/graphicsSettings';
 
 interface DevModePanelProps {
   room: RoomState;
 }
 
 const SOLO_READY_MINIGAMES = [
+  { id: 'controller-test', name: 'Controller Test (3D)', icon: '🎮' },
   { id: 'fruit-frenzy', name: 'Fruit Frenzy', icon: '🍎' },
   { id: 'bomb-dodge', name: 'Bomb Dodge', icon: '💣' },
   { id: 'coin-scramble', name: 'Coin Scramble', icon: '🪙' },
@@ -28,6 +30,7 @@ export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
   const [showCharDebug, setShowCharDebug] = useState(false);
   const [selectedMinigame, setSelectedMinigame] = useState<string>('fruit-frenzy');
   const [selectedEvent, setSelectedEvent] = useState<string>('coin_storm');
+  const [graphicsMode, setGraphicsMode] = useGraphicsMode();
 
   const addBot = () => {
     socket.emit(SOCKET_EVENTS.ADD_BOT, { roomCode: room.roomCode });
@@ -100,6 +103,56 @@ export const DevModePanel: React.FC<DevModePanelProps> = ({ room }) => {
         >
           <X className="w-6 h-6" />
         </button>
+      </div>
+
+      {/* GRAPHICS MODE SELECTOR: 2D (Default/Stable), AUTO, 3D */}
+      <div className="flex flex-col gap-2 border border-cyan-500/30 bg-cyan-950/20 p-3 rounded-2xl">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-black uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5" />
+            <span>GRAFIKAI MÓD (2D / 3D / AUTO)</span>
+          </label>
+          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+            {graphicsMode === '2D' ? '2D STABLE' : graphicsMode === '3D' ? '3D DEV' : 'AUTO DETECT'}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          <button
+            onClick={() => setGraphicsMode('2D')}
+            className={`py-2 px-1 rounded-xl text-xs font-black transition-all border ${
+              graphicsMode === '2D'
+                ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md scale-[1.02]'
+                : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-white'
+            }`}
+          >
+            [2D] Stabil
+          </button>
+          <button
+            onClick={() => setGraphicsMode('AUTO')}
+            className={`py-2 px-1 rounded-xl text-xs font-black transition-all border ${
+              graphicsMode === 'AUTO'
+                ? 'bg-cyan-400 text-slate-950 border-cyan-300 shadow-md scale-[1.02]'
+                : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-white'
+            }`}
+          >
+            [AUTO] Auto
+          </button>
+          <button
+            onClick={() => setGraphicsMode('3D')}
+            className={`py-2 px-1 rounded-xl text-xs font-black transition-all border ${
+              graphicsMode === '3D'
+                ? 'bg-purple-500 text-white border-purple-400 shadow-md scale-[1.02]'
+                : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-white'
+            }`}
+          >
+            [3D] Fejlesztői
+          </button>
+        </div>
+        <p className="text-[9px] text-slate-400">
+          {graphicsMode === '2D' && 'Alapértelmezett stabil 2D Canvas megjelenítés minden minijátékhoz.'}
+          {graphicsMode === 'AUTO' && 'Ha van kész 3D renderer, azt használja; egyébként automatikusan 2D fallback.'}
+          {graphicsMode === '3D' && '3D Three.js megjelenítés kényszerítése az elérhető 3D minijátékokhoz.'}
+        </p>
       </div>
 
       {/* 1 HUMAN + 0 BOTS SOLO DEV PLAYLIST */}

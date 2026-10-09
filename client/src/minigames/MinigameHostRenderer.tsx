@@ -12,76 +12,110 @@ import { FloorIsLava2DHost } from './floorIsLava/FloorIsLava2DHost';
 import { MonsterEscape2DHost } from './monsterEscape/MonsterEscape2DHost';
 import { PushArena2DHost } from './pushArena/PushArena2DHost';
 import { CrownChase2DHost } from './crownChase/CrownChase2DHost';
-import { AlertTriangle } from 'lucide-react';
+import { ThreeDErrorBoundary } from '../components/ThreeDErrorBoundary';
+import { useGraphicsMode, GraphicsMode } from './graphicsSettings';
+import { Layers } from 'lucide-react';
 
 interface MinigameHostRendererProps {
   room: RoomState;
 }
 
+export const MINIGAME_3D_STATUS: Record<string, { ready: boolean; name: string }> = {
+  'controller-test': { ready: true, name: 'Controller Test Arena 3D' },
+  'fruit-frenzy': { ready: false, name: 'Fruit Frenzy 3D' },
+  'bomb-dodge': { ready: false, name: 'Bomb Dodge 3D' },
+  'coin-scramble': { ready: false, name: 'Coin Scramble 3D' },
+  'treasure-grab': { ready: false, name: 'Treasure Grab 3D' },
+  'paint-panic': { ready: false, name: 'Paint Panic 3D' },
+  'delivery-dash': { ready: false, name: 'Delivery Dash 3D' },
+  'floor-is-lava': { ready: false, name: 'Floor Is Lava 3D' },
+  'monster-escape': { ready: false, name: 'Monster Escape 3D' },
+  'push-arena': { ready: false, name: 'Push Arena 3D' },
+  'crown-chase': { ready: false, name: 'Crown Chase 3D' },
+};
+
+export function shouldRender3D(id: string, mode: GraphicsMode): boolean {
+  if (mode === '2D') return false;
+  if (mode === '3D') return true;
+  return Boolean(MINIGAME_3D_STATUS[id]?.ready);
+}
+
 export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room }) => {
+  const [graphicsMode, setGraphicsMode] = useGraphicsMode();
   const mg = room.activeMinigame;
   if (!mg) return null;
   const mgData = mg.data || {};
   const players = Object.values(room.players);
 
-  // 1. FRUIT FRENZY: 2D Front-View Arcade Renderer
-  if (mg.id === 'fruit-frenzy') {
-    return <FruitFrenzy2DHost room={room} />;
-  }
+  const renderContent = () => {
+    // 3D Controller Test Arena
+    if (mg.id === 'controller-test') {
+      return (
+        <ThreeDErrorBoundary
+          minigameId="controller-test"
+          fallback={
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-amber-400 font-mono">
+              <span className="text-3xl">🎮</span>
+              <span className="font-bold">2D Controller Test Fallback</span>
+            </div>
+          }
+        >
+          <HostArena3D room={room} />
+        </ThreeDErrorBoundary>
+      );
+    }
 
-  // 2. BOMB DODGE: 2D Top-Down Arena Renderer
-  if (mg.id === 'bomb-dodge') {
-    return <BombDodge2DHost room={room} />;
-  }
+    // 1. FRUIT FRENZY: 2D Front-View Arcade Renderer (3D option wired in Phase 5)
+    if (mg.id === 'fruit-frenzy') {
+      return <FruitFrenzy2DHost room={room} />;
+    }
 
-  // 3. COIN SCRAMBLE: 2D Top-Down Arena Renderer
-  if (mg.id === 'coin-scramble') {
-    return <CoinScramble2DHost room={room} />;
-  }
+    // 2. BOMB DODGE: 2D Top-Down Arena Renderer
+    if (mg.id === 'bomb-dodge') {
+      return <BombDodge2DHost room={room} />;
+    }
 
-  // 4. TREASURE GRAB: 2D Top-Down Dungeon Renderer
-  if (mg.id === 'treasure-grab') {
-    return <TreasureGrab2DHost room={room} />;
-  }
+    // 3. COIN SCRAMBLE: 2D Top-Down Arena Renderer
+    if (mg.id === 'coin-scramble') {
+      return <CoinScramble2DHost room={room} />;
+    }
 
-  // 5. PAINT PANIC: 2D Top-Down Territory Painter
-  if (mg.id === 'paint-panic') {
-    return <PaintPanic2DHost room={room} />;
-  }
+    // 4. TREASURE GRAB: 2D Top-Down Dungeon Renderer
+    if (mg.id === 'treasure-grab') {
+      return <TreasureGrab2DHost room={room} />;
+    }
 
-  // 6. DELIVERY DASH: 2D Top-Down Courier Express
-  if (mg.id === 'delivery-dash') {
-    return <DeliveryDash2DHost room={room} />;
-  }
+    // 5. PAINT PANIC: 2D Top-Down Territory Painter
+    if (mg.id === 'paint-panic') {
+      return <PaintPanic2DHost room={room} />;
+    }
 
-  // 7. FLOOR IS LAVA: 2D Survival Grid
-  if (mg.id === 'floor-is-lava') {
-    return <FloorIsLava2DHost room={room} />;
-  }
+    // 6. DELIVERY DASH: 2D Top-Down Courier Express
+    if (mg.id === 'delivery-dash') {
+      return <DeliveryDash2DHost room={room} />;
+    }
 
-  // 8. MONSTER ESCAPE: 2D Horror Arcade Chaser
-  if (mg.id === 'monster-escape') {
-    return <MonsterEscape2DHost room={room} />;
-  }
+    // 7. FLOOR IS LAVA: 2D Survival Grid
+    if (mg.id === 'floor-is-lava') {
+      return <FloorIsLava2DHost room={room} />;
+    }
 
-  // 9. PUSH ARENA: 2D Top-Down Sumo Ring
-  if (mg.id === 'push-arena') {
-    return <PushArena2DHost room={room} />;
-  }
+    // 8. MONSTER ESCAPE: 2D Horror Arcade Chaser
+    if (mg.id === 'monster-escape') {
+      return <MonsterEscape2DHost room={room} />;
+    }
 
-  // 10. CROWN CHASE: 2D Top-Down Royal Tag
-  if (mg.id === 'crown-chase') {
-    return <CrownChase2DHost room={room} />;
-  }
+    // 9. PUSH ARENA: 2D Top-Down Sumo Ring
+    if (mg.id === 'push-arena') {
+      return <PushArena2DHost room={room} />;
+    }
 
-  // 3D Arena minigames with gamepad controls
-  if (
-    mg.id === 'controller-test'
-  ) {
-    return <HostArena3D room={room} />;
-  }
+    // 10. CROWN CHASE: 2D Top-Down Royal Tag
+    if (mg.id === 'crown-chase') {
+      return <CrownChase2DHost room={room} />;
+    }
 
-  switch (mg.id) {
+    switch (mg.id) {
     // 1. REACTION RUSH
     case 'reaction-rush':
       return (
@@ -421,5 +455,49 @@ export const MinigameHostRenderer: React.FC<MinigameHostRendererProps> = ({ room
           </div>
         </div>
       );
-  }
+    }
+  };
+
+  return (
+    <div className="relative w-full h-full min-h-0 flex flex-col">
+      {/* FLOATING RUNTIME GRAPHICS MODE SELECTOR */}
+      <div className="absolute top-2 right-2 z-40 flex items-center gap-1 bg-slate-950/85 border border-slate-700/80 rounded-xl p-1 backdrop-blur-md shadow-2xl text-[11px] font-mono select-none">
+        <span className="text-[10px] text-slate-400 font-bold px-1.5 hidden sm:inline-flex items-center gap-1">
+          <Layers className="w-3 h-3 text-cyan-400" />
+          MÓD:
+        </span>
+        <button
+          onClick={() => setGraphicsMode('2D')}
+          className={`px-2 py-0.5 rounded-lg font-black transition-all ${
+            graphicsMode === '2D' ? 'bg-amber-400 text-slate-950 shadow scale-105' : 'text-slate-400 hover:text-white'
+          }`}
+          title="2D Stabil Canvas (Alapértelmezett)"
+        >
+          2D
+        </button>
+        <button
+          onClick={() => setGraphicsMode('AUTO')}
+          className={`px-2 py-0.5 rounded-lg font-black transition-all ${
+            graphicsMode === 'AUTO' ? 'bg-cyan-400 text-slate-950 shadow scale-105' : 'text-slate-400 hover:text-white'
+          }`}
+          title="Auto Detektálás (3D ha kész, egyébként 2D)"
+        >
+          AUTO
+        </button>
+        <button
+          onClick={() => setGraphicsMode('3D')}
+          className={`px-2 py-0.5 rounded-lg font-black transition-all ${
+            graphicsMode === '3D' ? 'bg-purple-500 text-white shadow scale-105' : 'text-slate-400 hover:text-white'
+          }`}
+          title="3D Three.js Fejlesztői mód"
+        >
+          3D
+        </button>
+      </div>
+
+      <div className="w-full h-full min-h-0 flex-1 relative">
+        {renderContent()}
+      </div>
+    </div>
+  );
 };
