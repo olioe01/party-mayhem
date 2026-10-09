@@ -16,16 +16,18 @@ interface HostLobbyProps {
 export const HostLobby: React.FC<HostLobbyProps> = ({ room }) => {
   const [apiLanIp, setApiLanIp] = useState<string | null>(null);
   const [apiPort, setApiPort] = useState<number | null>(null);
+  const [apiTunnelUrl, setApiTunnelUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Fetch verified LAN IP from server info endpoint
+  // Fetch verified LAN IP & Tunnel URL from server info endpoint
   useEffect(() => {
     fetch('/api/info')
       .then(res => res.json())
       .then(data => {
         if (data.lanIp) setApiLanIp(data.lanIp);
         if (data.port) setApiPort(data.port);
+        if (data.tunnelUrl) setApiTunnelUrl(data.tunnelUrl);
       })
       .catch(() => {});
 
@@ -41,7 +43,12 @@ export const HostLobby: React.FC<HostLobbyProps> = ({ room }) => {
   const [isEditingIp, setIsEditingIp] = useState(false);
   const [ipInput, setIpInput] = useState('');
 
-  // Determine non-localhost LAN IP for QR code and join URL
+  // Determine active tunnel or non-localhost LAN IP for QR code and join URL
+  const isTunnelOrigin = window.location.hostname.includes('trycloudflare.com') || window.location.hostname.includes('loca.lt');
+  const activeTunnel = isTunnelOrigin
+    ? window.location.origin
+    : (customIp ? null : (apiTunnelUrl || room.serverLanUrl || null));
+
   const effectiveLanIp =
     customIp ||
     room.serverLanIp ||
@@ -51,8 +58,14 @@ export const HostLobby: React.FC<HostLobbyProps> = ({ room }) => {
       : '192.168.1.74');
 
   const effectivePort = room.serverPort || apiPort || window.location.port || '3000';
-  const manualJoinAddress = `${effectiveLanIp}:${effectivePort}/join`;
-  const joinUrl = `http://${effectiveLanIp}:${effectivePort}/join?room=${room.roomCode}`;
+  
+  const manualJoinAddress = activeTunnel
+    ? `${activeTunnel.replace(/^https?:\/\//, '')}/join`
+    : `${effectiveLanIp}:${effectivePort}/join`;
+
+  const joinUrl = activeTunnel
+    ? `${activeTunnel}/join?room=${room.roomCode}`
+    : `http://${effectiveLanIp}:${effectivePort}/join?room=${room.roomCode}`;
 
   const handleSaveIp = (newIp: string) => {
     const trimmed = newIp.trim();

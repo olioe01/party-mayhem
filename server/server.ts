@@ -12,6 +12,7 @@ import { RoomManager } from './rooms';
 import { setupSocketHandlers } from './socketHandlers';
 import { SOCKET_EVENTS } from '../shared/events';
 import { HealthResponse } from '../shared/types';
+import { startCloudflareTunnel, getTunnelUrl } from './tunnelManager';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,6 +145,7 @@ async function startServer() {
   // API endpoint for server info
   app.get('/api/info', (req, res) => {
     const currentNet = detectLanNetworkInfo();
+    const tunnelUrl = getTunnelUrl();
     res.json({
       name: 'PARTY MAYHEM',
       version: '1.0.0',
@@ -151,6 +153,8 @@ async function startServer() {
       lanIp: currentNet.recommendedIp,
       port: PORT,
       lanUrl: `http://${currentNet.recommendedIp}:${PORT}`,
+      tunnelUrl: tunnelUrl,
+      joinUrl: tunnelUrl ? `${tunnelUrl}/join` : `http://${currentNet.recommendedIp}:${PORT}/join`,
       alternativeLanIps: currentNet.alternativeIps
     });
   });
@@ -178,7 +182,7 @@ async function startServer() {
     // Vite dev middleware fallback
     const vite = await createViteServer({
       configFile: path.resolve(__dirname, '../vite.config.ts'),
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, allowedHosts: true },
       appType: 'spa'
     });
     app.use(vite.middlewares);
@@ -207,6 +211,15 @@ async function startServer() {
     } catch (e) {
       // mDNS fallback silently handled
     }
+
+    // Launch Cloudflare Tunnel for seamless, password-free mobile access
+    startCloudflareTunnel(PORT, (discoveredUrl) => {
+      const defaultRoom = roomManager.getRoom(DEFAULT_ROOM);
+      if (defaultRoom) {
+        defaultRoom.serverLanUrl = discoveredUrl;
+        roomManager.broadcastRoom(DEFAULT_ROOM);
+      }
+    });
 
     console.log('\n=========================================');
     console.log('PARTY MAYHEM SERVER\n');

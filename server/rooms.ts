@@ -33,6 +33,13 @@ export class RoomManager {
     return this.rooms.get(roomCode);
   }
 
+  public broadcastRoom(roomCode: string) {
+    const room = this.rooms.get(roomCode);
+    if (room) {
+      this.broadcastCallback(roomCode, room);
+    }
+  }
+
   public getOrCreateRoom(roomCode: string): RoomState {
     let room = this.rooms.get(roomCode);
     if (!room) {
