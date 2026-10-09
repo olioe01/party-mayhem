@@ -1,4 +1,4 @@
-import { RoomState, MinigameResultEntry } from '../../shared/types';
+import { RoomState, MinigameResultEntry, MinigameControllerConfig } from '../../shared/types';
 
 export interface MinigameDefinition {
   id: string;
@@ -6,6 +6,7 @@ export interface MinigameDefinition {
   description: string;
   duration: number; // in seconds
   instructions: string;
+  controllerConfig?: MinigameControllerConfig;
   setup: (room: RoomState) => void;
   start: (room: RoomState) => void;
   handleInput: (room: RoomState, playerId: string, data: any) => void;

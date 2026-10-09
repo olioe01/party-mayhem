@@ -195,6 +195,12 @@ export class RoomManager {
         const player = room.players[mapping.playerId];
         player.connected = false;
         player.disconnectedAt = Date.now();
+        // Immediately clear held inputs so character does not run forever
+        const clearedInput = { up: false, down: false, left: false, right: false, a: false, b: false };
+        player.lastInputState = clearedInput;
+        if (room.activeMinigame && room.phase === 'MINIGAME_PLAY') {
+          this.engine.handleMinigameInput(room, player.id, clearedInput);
+        }
         // Keep in room! DO NOT DELETE PLAYER!
         this.broadcastCallback(room.roomCode, room);
       }

@@ -112,8 +112,9 @@ export interface Player {
   // Secret Mission
   secretMission?: SecretMission | null;
 
-  // Minigame ready state
+  // Minigame ready & gamepad state
   minigameReady?: boolean;
+  lastInputState?: GamepadInputState;
 }
 
 export type GamePhase =
@@ -140,6 +141,24 @@ export interface MinigameResultEntry {
   extraInfo?: string;
 }
 
+export interface GamepadInputState {
+  up: boolean;
+  down: boolean;
+  left: boolean;
+  right: boolean;
+  a: boolean;
+  b: boolean;
+}
+
+export interface MinigameControllerConfig {
+  layout: 'gamepad' | 'custom';
+  aLabel?: string;
+  bLabel?: string;
+  aHidden?: boolean;
+  bHidden?: boolean;
+  instructions?: string;
+}
+
 export interface MinigameState {
   id: string;
   name: string;
@@ -148,6 +167,7 @@ export interface MinigameState {
   instructions: string;
   timeRemaining: number;
   isPaused: boolean;
+  controllerConfig?: MinigameControllerConfig;
   data: Record<string, any>; // minigame specific state
   results?: MinigameResultEntry[];
 }

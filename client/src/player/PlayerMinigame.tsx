@@ -7,6 +7,8 @@ import { socket } from '../socket';
 import { SOCKET_EVENTS } from '@shared/events';
 import { sounds } from '../audio/soundSynth';
 
+import { GamepadController } from '../components/controller/GamepadController';
+
 interface PlayerMinigameProps {
   room: RoomState;
   player: Player;
@@ -106,6 +108,25 @@ export const PlayerMinigame: React.FC<PlayerMinigameProps> = ({ room, player }) 
 
   // 2. ACTIVE PLAY
   if (room.phase === 'MINIGAME_PLAY') {
+    if (mg.controllerConfig?.layout === 'gamepad') {
+      let scoreDisplay: React.ReactNode = undefined;
+      if (mg.id === 'fruit-frenzy') {
+        const s = mg.data?.scores?.[player.id] ?? 0;
+        scoreDisplay = <span>{s} 🍎</span>;
+      } else if (mg.data?.scores?.[player.id] !== undefined) {
+        scoreDisplay = <span>{mg.data.scores[player.id]} pts</span>;
+      }
+
+      return (
+        <GamepadController
+          room={room}
+          player={player}
+          config={mg.controllerConfig}
+          scoreDisplay={scoreDisplay}
+        />
+      );
+    }
+
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col select-none overflow-hidden justify-between">
         {/* Top HUD */}

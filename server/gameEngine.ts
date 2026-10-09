@@ -597,9 +597,10 @@ export class GameEngine {
     const chosenId = specificMinigameId || minigameKeys[Math.floor(Math.random() * minigameKeys.length)];
     const mgDef = MINIGAMES[chosenId] || MINIGAMES['reaction-rush'];
 
-    // Reset minigame ready state for every player in the room
+    // Reset minigame ready state & input state for every player in the room
     Object.values(room.players).forEach(p => {
       p.minigameReady = false;
+      p.lastInputState = { up: false, down: false, left: false, right: false, a: false, b: false };
     });
 
     room.activeMinigame = {
@@ -610,6 +611,7 @@ export class GameEngine {
       instructions: mgDef.instructions,
       timeRemaining: mgDef.duration,
       isPaused: false,
+      controllerConfig: mgDef.controllerConfig,
       data: {}
     };
 
@@ -672,7 +674,7 @@ export class GameEngine {
     }, 3200);
   }
 
-  // Active Minigame loop
+  // Active Minigame loop (20 Hz simulation tick for real-time arcade responsiveness)
   private startMinigamePlay(room: RoomState, mgDef: any) {
     room.phase = 'MINIGAME_PLAY';
     mgDef.start(room);
@@ -680,7 +682,7 @@ export class GameEngine {
 
     if (this.minigameInterval) clearInterval(this.minigameInterval);
 
-    const stepMs = 200;
+    const stepMs = 50; // 20 updates per second
     this.minigameInterval = setInterval(() => {
       if (room.isPaused) return;
 
@@ -701,6 +703,19 @@ export class GameEngine {
   // Handle player inputs during minigames
   public handleMinigameInput(room: RoomState, playerId: string, data: any) {
     if (room.phase !== 'MINIGAME_PLAY' || !room.activeMinigame) return;
+    const player = room.players[playerId];
+    if (player && data && typeof data === 'object') {
+      if ('up' in data || 'a' in data || 'left' in data || 'right' in data) {
+        player.lastInputState = {
+          up: Boolean(data.up),
+          down: Boolean(data.down),
+          left: Boolean(data.left),
+          right: Boolean(data.right),
+          a: Boolean(data.a),
+          b: Boolean(data.b),
+        };
+      }
+    }
     const mgDef = MINIGAMES[room.activeMinigame.id];
     if (mgDef) {
       mgDef.handleInput(room, playerId, data);
