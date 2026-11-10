@@ -9,104 +9,41 @@ import * as net from './net.js';
 import { sfx, music } from './audio.js';
 import { MgSelectScene } from './mgflow.js';
 import * as b3 from './board3d.js';
+import { buildBoard } from './boardlayout.js';
 
 const TYPES = {
   B: { color: '#3b82f6', icon: '+' },
   R: { color: '#ef4444', icon: '−' },
   E: { color: '#a855f7', icon: '?' },
-  S: { color: '#f59e0b', icon: '🛒' },
-  T: { color: '#10b981', icon: '🏁' },
+  S: { color: '#f59e0b', icon: '🛒', emoji: true },
+  T: { color: '#10b981', icon: '🏁', emoji: true },
+  J: { color: '#06b6d4', icon: '🚀', emoji: true },
 };
-const OUTER = 'BBEBRBBSBEBBRBEBBEBBRBEB' + 'T' + 'BBRSBEB'; // 32 mező, 24-es a start
-const INNER = 'REBER'; // a rövidítés mezői
 const NODE_R = 21;
 
-export function buildBoard() {
-  const cx = 640, cy = 330, a = 500, b = 228, n = 4;
-  const pts = [];
-  const M = 4000;
-  for (let i = 0; i <= M; i++) {
-    const th = -Math.PI / 2 + (2 * Math.PI * i) / M;
-    const c = Math.cos(th), s = Math.sin(th);
-    pts.push([cx + a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), cy + b * Math.sign(s) * Math.pow(Math.abs(s), 2 / n)]);
-  }
-  const cum = [0];
-  for (let i = 1; i <= M; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-  const N = OUTER.length;
-  const nodes = [];
-  let j = 0;
-  for (let k = 0; k < N; k++) {
-    const target = (cum[M] * k) / N;
-    while (cum[j] < target) j++;
-    nodes.push({ id: k, x: pts[j][0], y: pts[j][1], type: OUTER[k], next: [(k + 1) % N] });
-  }
-  // rövidítés a tetejéről (0) az aljára (16), középen keresztül
-  const top = nodes[0], bottom = nodes[N / 2];
-  let prev = top;
-  for (let k = 1; k <= INNER.length; k++) {
-    const node = {
-      id: nodes.length, x: cx, y: lerp(top.y, bottom.y, k / (INNER.length + 1)), type: INNER[k - 1], next: [], inner: true,
-    };
-    nodes.push(node);
-    prev.next.push(node.id);
-    prev = node;
-  }
-  prev.next = [bottom.id];
-  return { nodes, start: 24, fork: 0 };
-}
-
-// 3D díszletek: [típus, x, y (2D px), méret]
-const DECO3D = [
-  ['castle', 380, 300, 1.15], ['volcano', 905, 290, 1.1], ['tree', 250, 205, 1], ['tree', 300, 455, 1.1],
-  ['pine', 520, 190, 1], ['pine', 470, 220, 0.8], ['tree', 520, 465, 0.9], ['palm', 760, 200, 1], ['palm', 1035, 440, 1],
-  ['cactus', 775, 455, 1], ['mushroom', 450, 410, 1.3], ['mushroom', 470, 430, 0.9], ['flowers', 250, 330, 1.4],
-  ['flowers', 1040, 215, 1.4], ['rock', 820, 375, 1.5], ['rock', 845, 390, 0.8], ['fountain', 255, 400, 1],
-  ['tent', 1000, 330, 1], ['flowers', 560, 330, 1.2], ['flowers', 720, 330, 1.2], ['tree', 1060, 290, 0.8],
-  ['pine', 220, 260, 0.8], ['tree', 700, 470, 0.8], ['rock', 580, 200, 0.9],
-];
+export { buildBoard };
 
 let staticCache = null;
+// tartalék 2D tábla (ha nincs WebGL)
 function renderStatic(board) {
   const cv = document.createElement('canvas');
   cv.width = W * 2;
   cv.height = H * 2;
   const c = cv.getContext('2d');
   c.scale(2, 2);
-  // víz
-  vgrad(c, '#4cc9f0', '#1d4e89');
-  c.strokeStyle = 'rgba(255,255,255,.18)';
-  c.lineWidth = 3;
-  for (let i = 0; i < 40; i++) {
-    const x = rand(0, W), y = rand(0, H);
+  vgrad(c, '#8fd3ff', '#3b82c4');
+  c.fillStyle = 'rgba(255,255,255,.35)';
+  for (let i = 0; i < 18; i++) {
     c.beginPath();
-    c.arc(x, y, 14, Math.PI * 1.1, Math.PI * 1.9);
-    c.stroke();
+    c.ellipse(rand(0, W), rand(0, H), rand(40, 90), rand(12, 24), 0, 0, Math.PI * 2);
+    c.fill();
   }
-  // sziget
-  rr(c, 78, 52, 1124, 556, 150);
-  c.fillStyle = '#f4d58d';
-  c.fill();
-  rr(c, 96, 68, 1088, 524, 135);
-  const g = c.createRadialGradient(640, 330, 100, 640, 330, 650);
-  g.addColorStop(0, '#9be15d');
-  g.addColorStop(1, '#3fa34d');
-  c.fillStyle = g;
-  c.fill();
-  for (let i = 0; i < 260; i++) {
-    c.fillStyle = `rgba(30,90,30,${rand(0.08, 0.2)})`;
-    const x = rand(130, 1150), y = rand(90, 570);
-    c.fillRect(x, y, 2, 6);
+  for (const s of board.islands) {
+    c.fillStyle = s.side;
+    c.beginPath(); c.ellipse(s.x, s.y + 12, s.rx, s.ry, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = s.top;
+    c.beginPath(); c.ellipse(s.x, s.y, s.rx, s.ry, 0, 0, Math.PI * 2); c.fill();
   }
-  // díszletek (a belső területeken, az utaktól távol)
-  const deco = [
-    ['🏰', 380, 300, 92], ['🌋', 905, 285, 92], ['🌳', 250, 200, 46], ['🌳', 300, 450, 50], ['🌲', 520, 190, 44],
-    ['🌳', 515, 460, 44], ['🌴', 760, 200, 46], ['🌴', 1040, 430, 48], ['🌵', 770, 455, 40], ['🍄', 450, 410, 30],
-    ['🌻', 250, 330, 30], ['🌷', 1040, 210, 30], ['🪨', 820, 370, 34], ['⛲', 255, 395, 36], ['🏕️', 1000, 330, 40],
-    ['🌼', 560, 330, 26], ['🌸', 720, 330, 26], ['⛵', 40, 640, 44], ['🐳', 1235, 90, 44], ['🦀', 1225, 640, 32],
-    ['🐠', 40, 110, 30], ['🏝️', 1240, 360, 40],
-  ];
-  for (const [e, x, y, s] of deco) emoji(c, e, x, y, s);
-  // utak
   const nodes = board.nodes;
   for (const pass of [0, 1, 2]) {
     for (const nd of nodes) {
@@ -124,7 +61,6 @@ function renderStatic(board) {
       }
     }
   }
-  // mezők
   for (const nd of nodes) {
     const t = TYPES[nd.type];
     c.fillStyle = 'rgba(0,0,0,.3)';
@@ -141,7 +77,7 @@ function renderStatic(board) {
     c.lineWidth = 4;
     c.strokeStyle = '#fff';
     c.stroke();
-    if (nd.type === 'S' || nd.type === 'T') emoji(c, t.icon, nd.x, nd.y, 22);
+    if (t.emoji) emoji(c, t.icon, nd.x, nd.y, 22);
     else text(c, t.icon, nd.x, nd.y + 1, { size: 26, color: '#fff', stroke: shade(t.color, -0.4), sw: 4 });
   }
   return cv;
@@ -188,7 +124,7 @@ export class BoardScene extends Scene {
     music('board');
     this.use3d = b3.available();
     if (this.use3d) {
-      b3.build(G.board, TYPES, DECO3D);
+      b3.build(G.board, TYPES);
       b3.setVisible(true);
     } else if (!staticCache || staticCache.board !== G.board) {
       staticCache = { board: G.board, img: renderStatic(G.board) };
@@ -339,7 +275,7 @@ export class BoardScene extends Scene {
         b3.cam.look(mx, my + 60, 'mid');
         const r = await net.ask(p.pid, {
           mode: 'choice', title: 'Merre mész?', text: `Még ${this.stepsLeft} lépés`,
-          options: [{ label: '➡️ Körút', sub: 'Hosszabb, de biztonságos' }, { label: '⬇️ Rövidítés', sub: 'Rövid, de sok a piros mező!' }],
+          options: node.routes || node.next.map((_, i) => ({ label: `${i + 1}. út` })),
         });
         this.forkFor = null;
         b3.cam.follow(p.pid, 'near', 3.5);
@@ -434,8 +370,27 @@ export class BoardScene extends Scene {
       case 'R': this.give(p, -3 * mult); await this.sleep(1); break;
       case 'E': await this.event(p); break;
       case 'S': await this.shop(p); break;
+      case 'J': await this.jumpPad(p, node); break;
       default:
     }
+  }
+
+  async jumpPad(p, node) {
+    if (node.pair == null) return;
+    const to = G.board.nodes[node.pair];
+    sfx.whoosh();
+    net.vibrate(p.pid, [40, 30, 120]);
+    await this.toast('🚀 Ugrópad!', 'Irány egy másik sziget!', 1.1);
+    if (this.dead) return;
+    b3.cam.overview(2.4);
+    if (this.use3d) b3.emote(p.pid, 'happy');
+    await this.hop(p, to.id, 1.3, 320);
+    if (this.dead) return;
+    p.node = to.id;
+    b3.cam.follow(p.pid, 'near', 3);
+    const { x, y } = this.pawnXY(p);
+    burst(x, y, { n: 24, colors: ['#22d3ee', '#fff', p.color], speed: 340 });
+    if (to.id === G.crownNode) await this.crownStop(p);
   }
 
   give(p, n) {
@@ -573,8 +528,7 @@ export class BoardScene extends Scene {
         c.strokeStyle = '#fff';
         c.lineWidth = 4;
         c.stroke();
-        text(c, i === 0 ? 'Körút ➡️' : '⬇️ Rövidítés', q.x + (i === 0 ? 34 : 0), q.y - 40,
-          { size: 20, stroke: '#1b1036', sw: 6, align: i === 0 ? 'left' : 'center' });
+        text(c, this.forkFor.routes?.[i]?.label ?? `${i + 1}.`, q.x, q.y - 40, { size: 20, stroke: '#1b1036', sw: 6 });
       });
     }
 

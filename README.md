@@ -12,9 +12,13 @@ npm start
 - **Játékképernyő (laptop/TV):** `http://localhost:3000/host`. Kattints a kezdéshez, `F` = teljes képernyő, `M` = hang ki/be.
 - **Telefonok:** olvassák be a QR-kódot a lobbyban (ugyanazon a Wi-Fi-n kell lenniük).
 
+**Legkönnyebb csatlakozás (bármilyen hálózatról):** `npm run tunnel`. Ehhez telepített `cloudflared` kell. A parancs egy ingyenes Cloudflare-címet nyit (`https://….trycloudflare.com`), és a lobby QR-kódja erre mutat, így mobilnetről és WSL alól is működik.
+
 ## A játék
 
-- A tábla egy szigeten körbefutó út, középen egy veszélyes **rövidítéssel**.
+- A tábla **lebegő szigetekből** áll (rét, erdő, kastély, vulkán, sivatag, kristály, öböl), amelyeket fahidak kötnek össze.
+- Két elágazás van: a **Kristály-rövidítés** a kastélytól lefelé, és a **Lávahíd** a vulkántól a közép felé. Mindkettő rövidebb, de veszélyesebb.
+  - 🚀 ugrópad: ha rálépsz, átrepít a párjához egy másik szigetre
 - Mindenki dob egy 1–10-es kockával (a telefonján koppintva), és lép.
   - 🔵 kék mező: +3 érme
   - 🔴 piros mező: −3 érme
@@ -35,6 +39,11 @@ npm start
 | 🪙 | Érmeeső | ◀ ▶ gombok |
 | 🧠 | Színmemória | 4 színes gomb |
 | 🔢 | Számold meg! | számbillentyűzet |
+| ⏱️ | Vak időzítő | egy gomb: állítsd meg „vakon” pontosan 10 / 7 / 13 mp-nél |
+| 🧮 | Fejszámolás | számbillentyűzet, a leggyorsabb helyes válasz nyer |
+| 🎯 | Célzó | egy gomb: állítsd meg a lengő mutatót a célzónában |
+
+A Színmemória legfeljebb 10 színig tart: aki odáig eljut, holtversenyben nyer.
 
 ### Hasznos
 

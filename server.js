@@ -11,6 +11,7 @@ const { Server } = require('socket.io');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_HOST = process.env.PUBLIC_HOST || null; // pl. 192.168.1.20 – ha az automatikus IP nem jó
+const PUBLIC_URL = process.env.PUBLIC_URL || null;   // teljes cím, pl. Cloudflare tunnel (https://xyz.trycloudflare.com)
 
 const app = express();
 const server = http.createServer(app);
@@ -34,7 +35,7 @@ function lanAddresses() {
 }
 
 app.get('/api/info', (req, res) => {
-  res.json({ port: PORT, addresses: lanAddresses(), publicHost: PUBLIC_HOST });
+  res.json({ port: PORT, addresses: lanAddresses(), publicHost: PUBLIC_HOST, publicUrl: PUBLIC_URL });
 });
 
 app.get('/api/qr', async (req, res) => {
@@ -104,6 +105,7 @@ server.listen(PORT, '0.0.0.0', () => {
   const addrs = PUBLIC_HOST ? [PUBLIC_HOST] : lanAddresses();
   console.log('\n  🎉 PARTY MAYHEM fut!\n');
   console.log(`  Játékképernyő (TV/laptop):  http://localhost:${PORT}/host`);
+  if (PUBLIC_URL) console.log(`  Telefonok (tunnel):         ${PUBLIC_URL}`);
   for (const a of addrs) console.log(`  Telefonok:                  http://${a}:${PORT}`);
   console.log('');
 });

@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from '/vendor/three/examples/jsm/utils/BufferGeometryUtils.js';
 import { W, H, emoji, text, shade } from './engine.js';
 import { build as buildChar } from './chars3d.js';
+import { seeded, islandAt } from './boardlayout.js';
 
 const S = 40;
 const toWorld = (x, y, h = 0) => new THREE.Vector3((x - 640) / S, h / S, (y - 330) / S);
@@ -15,6 +16,9 @@ let boardGroup = null, builtFor = null;
 const pawns = new Map();
 let crown = null, crownGlow = null, crownLight = null;
 const animated = []; // díszletek, amik mozognak (füst, láng)
+const OVERVIEW = { h: 26.5, d: 22 };
+// automatikus minőség: ha tartósan lassú a rajzolás, csökken a felbontás
+const quality = { dpr: 1.5, slow: 0 };
 
 // azonos beállítású anyagok megosztva (így a statikus elemek összevonhatók)
 const matCache = new Map();
@@ -27,7 +31,7 @@ function std(color, o = {}) {
 export function init() {
   glCanvas = document.getElementById('gl');
   try {
-    renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true });
+    renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, powerPreference: 'high-performance' });
   } catch (e) {
     console.warn('WebGL nem elérhető, 2D tábla lesz.', e);
     return false;
@@ -38,13 +42,15 @@ export function init() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
 
+  quality.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
   scene = new THREE.Scene();
-  scene.background = new THREE.Color('#5cc8f2');
-  scene.fog = new THREE.Fog('#8fd9f7', 32, 70);
+  scene.background = skyTexture();
+  scene.fog = new THREE.Fog('#cfe9ff', 38, 85);
 
-  camera = new THREE.PerspectiveCamera(36, W / H, 0.1, 200);
-  camera.position.set(0, 21, 17.5);
-  camera.lookAt(0, 0, 1.25);
+  // a közeli vágósík ne legyen túl kicsi: így pontosabb a mélységpuffer (kevesebb villogás)
+  camera = new THREE.PerspectiveCamera(36, W / H, 1, 160);
+  camera.position.set(0, OVERVIEW.h, OVERVIEW.d);
+  camera.lookAt(0, 0, 1);
 
   scene.add(new THREE.HemisphereLight('#e0f2fe', '#3f6212', 1.1));
   const sun = new THREE.DirectionalLight('#fff1d6', 2.4);
@@ -56,12 +62,7 @@ export function init() {
   sun.shadow.normalBias = 0.02;
   scene.add(sun);
 
-  // tenger
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), new THREE.MeshStandardMaterial({ color: '#2aa7df', roughness: 0.35, metalness: 0.05 }));
-  sea.rotation.x = -Math.PI / 2;
-  sea.position.y = -0.4;
-  sea.receiveShadow = true;
-  scene.add(sea);
+  buildClouds();
 
   buildCrown();
   buildMarker();
@@ -79,10 +80,55 @@ export function project(x, y, h = 0) {
   return { x: ((v.x + 1) / 2) * W, y: ((1 - v.y) / 2) * H };
 }
 
+function skyTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 4; cv.height = 256;
+  const c = cv.getContext('2d');
+  const g = c.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, '#3a9df0');
+  g.addColorStop(0.55, '#9fd6ff');
+  g.addColorStop(1, '#e3f4ff');
+  c.fillStyle = g;
+  c.fillRect(0, 0, 4, 256);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// felhők a szigetek alatt, lassan sodródnak
+function buildClouds() {
+  const rnd = seeded(3);
+  const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', emissive: '#c9e4ff', emissiveIntensity: 0.55 });
+  const clouds = [];
+  for (let i = 0; i < 12; i++) {
+    const parts = [];
+    const n = 3 + Math.floor(rnd() * 3);
+    for (let k = 0; k < n; k++) {
+      const gg = new THREE.IcosahedronGeometry(0.8 + rnd() * 0.7, 1);
+      gg.scale(1.4, 0.6, 1);
+      gg.translate((k - n / 2) * 1.3, rnd() * 0.4, (rnd() - 0.5) * 1.2);
+      parts.push(gg);
+    }
+    const m = new THREE.Mesh(mergeGeometries(parts, false), mat);
+    m.position.set(-34 + rnd() * 68, -12 - rnd() * 7, -18 + rnd() * 30);
+    m.scale.setScalar(0.9 + rnd() * 0.8);
+    m.userData.speed = 0.25 + rnd() * 0.35;
+    scene.add(m);
+    clouds.push(m);
+  }
+  cloudTick = (dt) => {
+    for (const m of clouds) {
+      m.position.x += m.userData.speed * dt;
+      if (m.position.x > 38) m.position.x = -38;
+    }
+  };
+}
+let cloudTick = null;
+
 function syncSize() {
   const w = glCanvas.clientWidth, h = glCanvas.clientHeight;
   if (!w || !h) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = quality.dpr;
   if (glCanvas.width !== Math.round(w * dpr) || glCanvas.height !== Math.round(h * dpr)) {
     renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
@@ -90,25 +136,6 @@ function syncSize() {
 }
 
 // ---------------------------------------------------------------- tábla
-function roundedRect(x0, z0, x1, z1, r) {
-  const s = new THREE.Shape();
-  s.moveTo(x0 + r, z0);
-  s.lineTo(x1 - r, z0); s.quadraticCurveTo(x1, z0, x1, z0 + r);
-  s.lineTo(x1, z1 - r); s.quadraticCurveTo(x1, z1, x1 - r, z1);
-  s.lineTo(x0 + r, z1); s.quadraticCurveTo(x0, z1, x0, z1 - r);
-  s.lineTo(x0, z0 + r); s.quadraticCurveTo(x0, z0, x0 + r, z0);
-  return s;
-}
-
-function slab(shape, depth, mat, y) {
-  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 2, curveSegments: 16 });
-  g.rotateX(-Math.PI / 2);
-  const m = new THREE.Mesh(g, mat);
-  m.position.y = y;
-  m.receiveShadow = true;
-  return m;
-}
-
 const iconCache = new Map();
 function iconTexture(type, info) {
   if (iconCache.has(type)) return iconCache.get(type);
@@ -123,31 +150,74 @@ function iconTexture(type, info) {
   c.lineWidth = 10;
   c.strokeStyle = '#ffffff';
   c.beginPath(); c.arc(64, 64, 56, 0, Math.PI * 2); c.stroke();
-  if (type === 'S' || type === 'T') emoji(c, info.icon, 64, 64, 62);
+  if (info.emoji) emoji(c, info.icon, 64, 64, 62);
   else text(c, info.icon, 64, 68, { size: 84, color: '#fff', stroke: shade(info.color, -0.4), sw: 10 });
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  iconCache.set(type, tex);
-  return tex;
+  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55 });
+  iconCache.set(type, mat);
+  return mat;
 }
 
-export function build(board, types, deco) {
+// determinisztikus "zaj" a csúcspont helyéből (így a varratoknál nem nyílik rés)
+function hashNoise(x, y, z) {
+  const h = Math.sin(Math.round(x * 50) * 12.9898 + Math.round(y * 50) * 78.233 + Math.round(z * 50) * 37.719) * 43758.5453;
+  return h - Math.floor(h);
+}
+
+// egy lebegő sziget: fűtető, földperem, alatta lefelé keskenyedő, egyenetlen szikla
+function islandMesh(s) {
+  const g = new THREE.Group();
+  const c = toWorld(s.x, s.y);
+  const rx = s.rx / S, rz = s.ry / S;
+  const segs = s.small ? 9 : 30;
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.3, segs), std(s.top, { flatShading: false, roughness: 0.95 }));
+  top.scale.set(rx, 1, rz);
+  top.position.set(c.x, -0.15, c.z);
+  top.receiveShadow = true;
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(1.015, 0.93, 0.6, segs), std(s.side));
+  rim.scale.set(rx, 1, rz);
+  rim.position.set(c.x, -0.58, c.z);
+  const depth = Math.min(7, 1.1 + Math.sqrt(rx * rz) * 1.1);
+  const cg = new THREE.ConeGeometry(0.93, depth, segs, 4);
+  cg.rotateX(Math.PI); // csúcs lefelé
+  const pos = cg.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    if (y > depth / 2 - 0.01) continue; // a felső perem maradjon kerek
+    const n = hashNoise(x, y, z);
+    const k = 0.8 + n * 0.4;
+    pos.setXYZ(i, x * k, y + (n - 0.5) * depth * 0.12, z * k);
+  }
+  cg.computeVertexNormals();
+  const rock = new THREE.Mesh(cg, std(s.rock));
+  rock.scale.set(rx, 1, rz);
+  rock.position.set(c.x, -0.88 - depth / 2, c.z);
+  g.add(top, rim, rock);
+  return g;
+}
+
+export function build(board, types) {
   if (!ok || builtFor === board) return;
   if (boardGroup) scene.remove(boardGroup);
   builtFor = board;
   boardGroup = new THREE.Group();
   animated.length = 0;
+  const rnd = seeded(11);
 
-  // sziget: homok + fű
-  const sx0 = (78 - 640) / S, sx1 = (1202 - 640) / S, sz0 = (52 - 330) / S, sz1 = (608 - 330) / S;
-  boardGroup.add(slab(roundedRect(sx0, sz0, sx1, sz1, 3.6), 0.55, std('#f2d18b', { flatShading: false }), -0.62));
-  boardGroup.add(slab(roundedRect(sx0 + 0.45, sz0 + 0.42, sx1 - 0.45, sz1 - 0.42, 3.2), 0.08, std('#7cc552', { flatShading: false, roughness: 0.95 }), -0.1));
+  for (const s of board.islands) boardGroup.add(islandMesh(s));
+  // a szigeten kívüli (hídon álló) mezők alá kis lebegő szikla
+  for (const nd of board.nodes) {
+    if (nd.island) continue;
+    boardGroup.add(islandMesh({ x: nd.x, y: nd.y, rx: 30, ry: 27, top: '#a8a29e', side: '#78716c', rock: '#57534e', small: true }));
+  }
 
-  // utak
-  const roadDark = std('#7a5a32', { flatShading: false });
-  const roadTop = std('#ecd09a', { flatShading: false });
-  const roadRisky = std('#efb3a0', { flatShading: false });
+  // utak a szigeteken, fahidak a szigetek között
+  const po = { flatShading: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 };
+  const roadTop = std('#e8cc94', po);
+  const roadRisky = std('#efb3a0', po);
+  const plank = std('#a8743f'), plank2 = std('#8f6034'), rope = std('#5c3d22');
   for (const nd of board.nodes) {
     for (const nid of nd.next) {
       const to = board.nodes[nid];
@@ -155,13 +225,41 @@ export function build(board, types, deco) {
       const len = a.distanceTo(b);
       const mid = a.clone().add(b).multiplyScalar(0.5);
       const ang = -Math.atan2(b.z - a.z, b.x - a.x);
-      for (const [w, hgt, mat, y] of [[0.74, 0.08, roadDark, 0.02], [0.54, 0.08, (nd.inner || to.inner) ? roadRisky : roadTop, 0.05]]) {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(len, hgt, w), mat);
-        m.position.set(mid.x, y, mid.z);
+      let land = true;
+      for (let k = 0.15; k <= 0.86; k += 0.14) {
+        if (!islandAt(nd.x + (to.x - nd.x) * k, nd.y + (to.y - nd.y) * k, -10)) land = false;
+      }
+      if (land) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(len, 0.06, 0.56), (nd.inner || to.inner) ? roadRisky : roadTop);
+        m.position.set(mid.x, 0.01, mid.z);
         m.rotation.y = ang;
         m.receiveShadow = true;
         boardGroup.add(m);
+        continue;
       }
+      // híd: deszkák + korlát + oszlopok
+      const bridge = new THREE.Group();
+      bridge.position.copy(mid);
+      bridge.rotation.y = ang;
+      const nPl = Math.max(3, Math.round(len / 0.3));
+      for (let i = 0; i < nPl; i++) {
+        const pl = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.07, 0.78 + (i % 3) * 0.04), i % 2 ? plank : plank2);
+        pl.position.set(-len / 2 + (i + 0.5) * (len / nPl), -0.01 - (i % 2) * 0.012, 0);
+        pl.receiveShadow = true;
+        bridge.add(pl);
+      }
+      for (const zz of [-0.42, 0.42]) {
+        const r = new THREE.Mesh(new THREE.BoxGeometry(len, 0.04, 0.04), rope);
+        r.position.set(0, 0.34, zz);
+        bridge.add(r);
+        for (const xx of [-len / 2 + 0.25, 0, len / 2 - 0.25]) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.42, 0.07), plank2);
+          post.position.set(xx, 0.16, zz);
+          post.castShadow = true;
+          bridge.add(post);
+        }
+      }
+      boardGroup.add(bridge);
     }
   }
 
@@ -169,8 +267,7 @@ export function build(board, types, deco) {
   for (const nd of board.nodes) {
     const info = types[nd.type];
     const side = std(shade(info.color, -0.25), { flatShading: false });
-    const top = new THREE.MeshStandardMaterial({ map: iconTexture(nd.type, info), roughness: 0.55 });
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.58, 0.2, 40), [side, top, side]);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.58, 0.2, 40), [side, iconTexture(nd.type, info), side]);
     const p = toWorld(nd.x, nd.y);
     m.position.set(p.x, 0.16, p.z);
     m.rotation.y = Math.PI / 2; // a henger tetején a textúra teteje így néz a kamerától el
@@ -180,24 +277,33 @@ export function build(board, types, deco) {
   }
 
   // díszletek
-  for (const [kind, x, y, s] of deco) {
+  for (const [kind, x, y, sc] of board.deco) {
     const obj = DECO[kind]?.();
     if (!obj) continue;
     const p = toWorld(x, y);
     obj.position.set(p.x, 0, p.z);
-    obj.scale.setScalar(s);
+    obj.scale.setScalar(sc);
     obj.rotation.y = (x * 7 + y * 3) % 6;
     obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     boardGroup.add(obj);
   }
-  // kis sziklák a vízben
-  for (const [x, z, s] of [[-17, -4, 0.8], [17.5, 3, 1], [-16.5, 6.5, 0.6], [15, -7.5, 0.7], [-12, 9.5, 0.5]]) {
-    const r = DECO.rock();
-    r.position.set(x, -0.45, z);
-    r.scale.setScalar(s * 2);
-    boardGroup.add(r);
-  }
   mergeStatic(boardGroup);
+
+  // apró lebegő sziklák a szigetek körül (lassan himbálóznak)
+  const floaters = [];
+  for (let i = 0; i < 14; i++) {
+    const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.15 + rnd() * 0.3, 0), std(rnd() < 0.5 ? '#78716c' : '#8b7d6b'));
+    let x, z;
+    do { x = -17 + rnd() * 34; z = -9 + rnd() * 14; } while (islandAt(x * S + 640, z * S + 330, 70));
+    r.position.set(x, -1.5 - rnd() * 3, z);
+    r.userData = { y0: r.position.y, ph: rnd() * 6, sp: 0.5 + rnd() * 0.6 };
+    boardGroup.add(r);
+    floaters.push(r);
+  }
+  animated.push((t) => floaters.forEach((r) => {
+    r.position.y = r.userData.y0 + Math.sin(t * r.userData.sp + r.userData.ph) * 0.25;
+    r.rotation.y = t * 0.2 + r.userData.ph;
+  }));
   scene.add(boardGroup);
 }
 
@@ -382,6 +488,19 @@ const DECO = {
     animated.push((t2) => { fire.scale.y = 0.8 + Math.sin(t2 * 18) * 0.25; });
     return g;
   },
+  crystal() {
+    const g = new THREE.Group();
+    const cols = ['#c4b5fd', '#a78bfa', '#e9d5ff'];
+    [[0, 0, 0.9, 0], [0.28, 0.1, 0.6, 0.3], [-0.25, -0.12, 0.55, -0.35], [0.05, -0.3, 0.45, 0.15]].forEach(([x, z, h, tilt], i) => {
+      const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0),
+        std(cols[i % 3], { emissive: '#7c3aed', emissiveIntensity: 0.35, roughness: 0.3, metalness: 0.1 }));
+      m.scale.set(1, h * 4, 1);
+      m.position.set(x, h * 0.75, z);
+      m.rotation.z = tilt;
+      g.add(m);
+    });
+    return g;
+  },
   cactus() {
     const g = new THREE.Group();
     const m = std('#3c8f4a');
@@ -526,19 +645,30 @@ function animatePawn(o, d, t, dt) {
 
 let lastT = 0;
 
+function adaptQuality(dt) {
+  if (dt <= 0) return;
+  if (dt > 1 / 40) quality.slow += dt;
+  else quality.slow = Math.max(0, quality.slow - dt * 0.5);
+  if (quality.slow > 2.5 && quality.dpr > 0.75) {
+    quality.dpr = Math.max(0.75, quality.dpr - 0.25);
+    quality.slow = 0;
+    console.info('Party Mayhem: grafikai felbontás csökkentve', quality.dpr);
+  }
+}
+
 // ---------------------------------------------------------------- kamera
 // Módok: áttekintés (egész tábla), játékos követése, egy pont nézése.
 // A kamera rugószerűen, simán úszik a cél felé.
 const ZOOMS = {
-  far: { h: 21, d: 17.5, lead: 0 },
+  far: { h: OVERVIEW.h, d: OVERVIEW.d, lead: 0 },
   mid: { h: 13.5, d: 11.5, lead: 1.2 },
   near: { h: 9.5, d: 8.2, lead: 0.6 },
   close: { h: 6.2, d: 5.6, lead: 0.45 },
 };
-const OVERVIEW_LOOK = new THREE.Vector3(0, 0, 1.25);
+const OVERVIEW_LOOK = new THREE.Vector3(0, 0, 1);
 const camState = {
   mode: 'overview', pid: null, point: null, zoom: 'far',
-  pos: new THREE.Vector3(0, 21, 17.5), look: OVERVIEW_LOOK.clone(), speed: 3,
+  pos: new THREE.Vector3(0, OVERVIEW.h, OVERVIEW.d), look: OVERVIEW_LOOK.clone(), speed: 3,
 };
 
 export const cam = {
@@ -553,13 +683,13 @@ function camTarget() {
   let p = null;
   if (camState.mode === 'follow') p = pawns.get(camState.pid)?.group.position;
   else if (camState.mode === 'point') p = camState.point;
-  if (!p) return { pos: new THREE.Vector3(0, 21, 17.5), look: OVERVIEW_LOOK.clone() };
+  if (!p) return { pos: new THREE.Vector3(0, OVERVIEW.h, OVERVIEW.d), look: OVERVIEW_LOOK.clone() };
   const z = ZOOMS[camState.zoom] || ZOOMS.near;
   // a figurát a képernyő alsó-közepére tesszük, hogy a feliratok ne takarják
   const look = new THREE.Vector3(
-    THREE.MathUtils.clamp(p.x, -12.8, 12.8),
+    THREE.MathUtils.clamp(p.x, -13, 13),
     0.4,
-    THREE.MathUtils.clamp(p.z - z.lead, -6.5, 5.5),
+    THREE.MathUtils.clamp(p.z - z.lead, -7, 6.5),
   );
   return { pos: look.clone().add(new THREE.Vector3(0, z.h, z.d)), look };
 }
@@ -579,6 +709,8 @@ export function render(st) {
   syncSize();
   const dt = Math.min(0.05, Math.max(0, st.t - lastT));
   lastT = st.t;
+  adaptQuality(dt);
+  cloudTick?.(dt);
   const seen = new Set();
   let curPos = null;
   for (const d of st.pawns) {
@@ -597,16 +729,20 @@ export function render(st) {
 
   if (st.crown) {
     const w = toWorld(st.crown.x, st.crown.y, st.crown.h);
-    crown.visible = crownLight.visible = true;
+    crown.visible = true;
+    crownLight.intensity = 6;
     crown.position.set(w.x, w.y + 0.9 + Math.sin(st.t * 3) * 0.12, w.z);
     crown.rotation.y = st.t * 1.4;
     crownLight.position.set(w.x, w.y + 1.2, w.z);
     crownGlow.visible = st.crown.h < 5;
-    crownGlow.position.set(w.x, 0.28, w.z);
+    crownGlow.position.set(w.x, 0.3, w.z);
     crownGlow.material.opacity = 0.35 + Math.sin(st.t * 4) * 0.25;
     crownGlow.scale.setScalar(1 + Math.sin(st.t * 4) * 0.08);
   } else {
-    crown.visible = crownLight.visible = crownGlow.visible = false;
+    // a fényt nem kapcsoljuk ki (visible=false): a fényszám változása miatt
+    // minden anyag shadere újrafordulna, ami akadást okoz
+    crown.visible = crownGlow.visible = false;
+    crownLight.intensity = 0;
   }
   for (const f of animated) f(st.t);
   renderer.render(scene, camera);

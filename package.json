@@ -4,7 +4,8 @@
   "description": "Helyi, böngészős partijáték – a telefonok a kontrollerek",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "tunnel": "node tunnel.js"
   },
   "dependencies": {
     "express": "^4.21.2",

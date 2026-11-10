@@ -29,7 +29,8 @@ export class LobbyScene extends Scene {
       try {
         const info = await (await fetch('/api/info')).json();
         const addr = info.publicHost || info.addresses[0];
-        if (addr) base = `http://${addr}:${info.port}`;
+        if (info.publicUrl) base = info.publicUrl.replace(/\/$/, '');
+        else if (addr) base = `http://${addr}:${info.port}`;
       } catch { /* marad a localhost */ }
     }
     this.url = base;

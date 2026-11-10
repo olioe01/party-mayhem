@@ -33,7 +33,7 @@ export class MgSelectScene extends Scene {
     music('mg');
     const pool = MINIGAMES.filter((m) => !G.recentMg.includes(m.id));
     this.choice = (this.force && MINIGAMES.find((m) => m.id === this.force)) || pick(pool.length ? pool : MINIGAMES);
-    G.recentMg = [...G.recentMg, this.choice.id].slice(-Math.min(3, MINIGAMES.length - 1));
+    G.recentMg = [...G.recentMg, this.choice.id].slice(-Math.min(5, MINIGAMES.length - 1));
     this.strip = [];
     for (let i = 0; i < 26; i++) this.strip.push(MINIGAMES[i % MINIGAMES.length]);
     this.strip.push(this.choice);

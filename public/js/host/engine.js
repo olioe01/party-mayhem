@@ -87,15 +87,15 @@ export function emoji(c, e, x, y, size, alpha = 1) {
 export function panel(c, x, y, w, h, o = {}) {
   const { fill = 'rgba(24,14,56,.88)', stroke = 'rgba(255,255,255,.18)', r = 20, lw = 3, shadow = true } = o;
   c.save();
+  // olcsó árnyék: a shadowBlur minden képkockán nagyon drága (főleg nagy felbontáson)
   if (shadow) {
-    c.shadowColor = 'rgba(0,0,0,.45)';
-    c.shadowBlur = 24;
-    c.shadowOffsetY = 8;
+    rr(c, x + 2, y + 7, w, h, r);
+    c.fillStyle = 'rgba(0,0,0,.28)';
+    c.fill();
   }
   rr(c, x, y, w, h, r);
   c.fillStyle = fill;
   c.fill();
-  c.shadowColor = 'transparent';
   if (stroke) {
     c.lineWidth = lw;
     c.strokeStyle = stroke;

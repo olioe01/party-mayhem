@@ -9,7 +9,8 @@ export const PADS = [
   { color: '#51cf66', shape: '■' },
   { color: '#ffd43b', shape: '★' },
 ];
-const STEP = 0.6, LIT = 0.42, MAXLEN = 14;
+const STEP = 0.6, LIT = 0.42;
+export const MAXLEN = 10; // aki eddig eljut, holtversenyben nyer
 
 class Memory {
   constructor(players) {
@@ -121,15 +122,19 @@ class Memory {
   ranking() {
     return this.players.map((p) => {
       const s = this.st.get(p.pid);
+      // a 10-ig eljutók holtversenyben vannak (azonos pontszám = azonos hely)
+      if (s.best >= MAXLEN) return { pid: p.pid, score: MAXLEN * 1000, label: `${MAXLEN} szín 🏆` };
       return { pid: p.pid, score: s.best * 1000 - Math.round(s.total * 10), label: `${s.best} szín` };
     }).sort((a, b) => b.score - a.score);
   }
 
   draw(c) {
     vgrad(c, '#1e1b4b', '#0b0920');
-    const label = { pre: 'Készülj!', show: 'Figyeld a sorrendet! 👀', input: 'Most te jössz – a telefonodon!', check: this.alive.size ? 'Szuper! Jön a következő…' : 'Mindenki kiesett!' }[this.phase];
+    const label = { pre: 'Készülj!', show: 'Figyeld a sorrendet! 👀', input: 'Most te jössz – a telefonodon!', check: !this.alive.size ? 'Mindenki kiesett!'
+      : this.seq.length >= MAXLEN ? (this.alive.size > 1 ? `🏆 ${MAXLEN} szín – döntetlen!` : `🏆 Megvan mind a ${MAXLEN} szín!`)
+        : 'Szuper! Jön a következő…' }[this.phase];
     text(c, label, 640, 50, { size: 34, stroke: '#000', sw: 6 });
-    text(c, `Sorozat hossza: ${this.seq.length}`, 640, 92, { size: 22, color: '#c5bdf2', weight: 600 });
+    text(c, `Sorozat hossza: ${this.seq.length} / ${MAXLEN}`, 640, 92, { size: 22, color: '#c5bdf2', weight: 600 });
     if (this.phase === 'input') {
       const k = Math.max(0, 1 - this.phaseT / this.limit);
       rr(c, 440, 112, 400, 10, 5);
@@ -185,7 +190,7 @@ class Memory {
 export default {
   id: 'memory', name: 'Színmemória', icon: '🧠', color: '#4dabf7',
   tagline: 'Ki bírja a legtovább?',
-  desc: 'A nagy képernyőn felvillan egy színsorozat. Ismételd meg pontosan a telefonodon! A sorozat minden körben eggyel hosszabb, és aki hibázik, kiesik.',
+  desc: 'A nagy képernyőn felvillan egy színsorozat. Ismételd meg pontosan a telefonodon! A sorozat minden körben eggyel hosszabb, és aki hibázik, kiesik. Aki eljut 10 színig, holtversenyben nyer.',
   controls: 'Figyeld a képernyőt, aztán nyomd meg a színes gombokat ugyanabban a sorrendben.',
   layout: (p) => ({ mode: 'pads', enabled: false, pads: PADS, title: 'Figyeld a képernyőt! 👀' }),
   create: (players) => new Memory(players),
