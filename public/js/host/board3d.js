@@ -525,6 +525,53 @@ function animatePawn(o, d, t, dt) {
 }
 
 let lastT = 0;
+
+// ---------------------------------------------------------------- kamera
+// Módok: áttekintés (egész tábla), játékos követése, egy pont nézése.
+// A kamera rugószerűen, simán úszik a cél felé.
+const ZOOMS = {
+  far: { h: 21, d: 17.5, lead: 0 },
+  mid: { h: 13.5, d: 11.5, lead: 1.2 },
+  near: { h: 9.5, d: 8.2, lead: 0.6 },
+  close: { h: 6.2, d: 5.6, lead: 0.45 },
+};
+const OVERVIEW_LOOK = new THREE.Vector3(0, 0, 1.25);
+const camState = {
+  mode: 'overview', pid: null, point: null, zoom: 'far',
+  pos: new THREE.Vector3(0, 21, 17.5), look: OVERVIEW_LOOK.clone(), speed: 3,
+};
+
+export const cam = {
+  overview(speed = 2.2) { Object.assign(camState, { mode: 'overview', speed }); },
+  follow(pid, zoom = 'near', speed = 3) { Object.assign(camState, { mode: 'follow', pid, zoom, speed }); },
+  look(x, y, zoom = 'mid', speed = 3) { Object.assign(camState, { mode: 'point', point: toWorld(x, y), zoom, speed }); },
+  // azonnal oda ugrik (pl. kezdő ráközelítéshez)
+  snap() { const d = camTarget(); camState.pos.copy(d.pos); camState.look.copy(d.look); },
+};
+
+function camTarget() {
+  let p = null;
+  if (camState.mode === 'follow') p = pawns.get(camState.pid)?.group.position;
+  else if (camState.mode === 'point') p = camState.point;
+  if (!p) return { pos: new THREE.Vector3(0, 21, 17.5), look: OVERVIEW_LOOK.clone() };
+  const z = ZOOMS[camState.zoom] || ZOOMS.near;
+  // a figurát a képernyő alsó-közepére tesszük, hogy a feliratok ne takarják
+  const look = new THREE.Vector3(
+    THREE.MathUtils.clamp(p.x, -12.8, 12.8),
+    0.4,
+    THREE.MathUtils.clamp(p.z - z.lead, -6.5, 5.5),
+  );
+  return { pos: look.clone().add(new THREE.Vector3(0, z.h, z.d)), look };
+}
+
+function updateCamera(dt) {
+  const d = camTarget();
+  const k = 1 - Math.exp(-dt * camState.speed);
+  camState.pos.lerp(d.pos, k);
+  camState.look.lerp(d.look, k);
+  camera.position.copy(camState.pos);
+  camera.lookAt(camState.look);
+}
 // ---------------------------------------------------------------- rajz
 // st = { pawns: [{p, x, y, h, current}], crown: {x, y, h} | null, t }
 export function render(st) {
@@ -541,6 +588,7 @@ export function render(st) {
     if (d.current) curPos = o.group.position;
   }
   for (const [pid, o] of pawns) if (!seen.has(pid)) { scene.remove(o.group); pawns.delete(pid); }
+  updateCamera(dt);
   marker.visible = !!curPos;
   if (curPos) {
     marker.position.set(curPos.x, curPos.y + 1.9 + Math.sin(st.t * 5) * 0.1, curPos.z);

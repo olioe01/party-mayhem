@@ -211,11 +211,17 @@ export class BoardScene extends Scene {
   // ---------------------------------------------------------------- menet
   async run() {
     if (this.intro) {
+      // nyitó kamera: közelről a rajtnál, onnan húzódik ki az egész táblára
+      const st = G.board.nodes[G.board.start];
+      b3.cam.look(st.x, st.y, 'close');
+      b3.cam.snap();
+      this.after(0.6, () => b3.cam.overview(0.9));
       await this.toast('Kezdődik a játék!', `${G.maxRounds} kör · a legtöbb 👑 koronát gyűjtő nyer`, 2.4);
       await this.toast('Sorrend', G.players.map((p) => p.name).join('  →  '), 2.6);
       await this.placeCrown();
     }
     if (this.dead) return;
+    b3.cam.overview();
     await this.toast(`${G.round}. kör`, G.round === G.maxRounds ? 'Ez az utolsó kör!' : `még ${G.maxRounds - G.round + 1} kör van hátra`, 1.6);
     if (isLastRounds() && G.round === G.maxRounds - 2) {
       sfx.fanfare();
@@ -227,6 +233,7 @@ export class BoardScene extends Scene {
     }
     if (this.dead) return;
     this.current = null;
+    b3.cam.overview();
     for (const p of G.players) net.setCtrl(p.pid, { mode: 'wait', icon: '🎮', title: 'Minijáték jön!', text: 'Készülj!' });
     await this.toast('🎮 Minijáték!', 'Mindenki játszik mindenki ellen', 1.6);
     setScene(new MgSelectScene());
@@ -234,6 +241,7 @@ export class BoardScene extends Scene {
 
   async turn(p) {
     this.current = p;
+    b3.cam.follow(p.pid, 'near', 2.5);
     sfx.select();
     for (const q of G.players) {
       if (q !== p) net.setCtrl(q.pid, { mode: 'wait', char: p.char, title: `${p.name} következik`, text: 'Figyeld a képernyőt!' });
@@ -261,6 +269,7 @@ export class BoardScene extends Scene {
       total += v;
     }
     if (dice > 1) await this.toast(`${rolls.join(' + ')} = ${total}`, 'lépés', 1.2);
+    b3.cam.follow(p.pid, 'near', 3.5);
     await this.move(p, total);
     if (this.dead) return;
     await this.land(p);
@@ -301,8 +310,8 @@ export class BoardScene extends Scene {
   }
 
   async rollDie(p, i, n) {
-    const { x, y } = this.pawnXY(p);
-    this.dice = { x, y: y - 85, val: randi(1, 10), rolling: true, next: 0, hitT: 0 };
+    b3.cam.follow(p.pid, 'close', 3);
+    this.dice = { p, val: randi(1, 10), rolling: true, next: 0, hitT: 0 };
     const label = n > 1 ? `🎲 DOBJ! (${i + 1}/${n})` : '🎲 DOBJ!';
     await net.ask(p.pid, { mode: 'tap', label, hint: 'Koppints a dobáshoz!', botAuto: true }, ['tap'], 25);
     if (this.dead) return 0;
@@ -310,7 +319,8 @@ export class BoardScene extends Scene {
     this.dice.hitT = this.t;
     sfx.hit();
     net.vibrate(p.pid, 80);
-    burst(this.dice.x, this.dice.y, { n: 18, colors: ['#fff', p.color, '#ffd43b'], speed: 300 });
+    const dq = this.dicePos();
+    burst(dq.x, dq.y, { n: 18, colors: ['#fff', p.color, '#ffd43b'], speed: 300 });
     await this.sleep(0.9);
     const v = this.dice.val;
     this.dice = null;
@@ -324,11 +334,15 @@ export class BoardScene extends Scene {
       let nextId = node.next[0];
       if (node.next.length > 1) {
         this.forkFor = node;
+        const mx = node.next.reduce((a, id) => a + G.board.nodes[id].x, node.x) / (node.next.length + 1);
+        const my = node.next.reduce((a, id) => a + G.board.nodes[id].y, node.y) / (node.next.length + 1);
+        b3.cam.look(mx, my + 60, 'mid');
         const r = await net.ask(p.pid, {
           mode: 'choice', title: 'Merre mész?', text: `Még ${this.stepsLeft} lépés`,
           options: [{ label: '➡️ Körút', sub: 'Hosszabb, de biztonságos' }, { label: '⬇️ Rövidítés', sub: 'Rövid, de sok a piros mező!' }],
         });
         this.forkFor = null;
+        b3.cam.follow(p.pid, 'near', 3.5);
         if (this.dead) return;
         nextId = node.next[r.v] ?? node.next[0];
       }
@@ -365,6 +379,7 @@ export class BoardScene extends Scene {
   }
 
   async crownStop(p) {
+    b3.cam.follow(p.pid, 'close', 3);
     if (p.coins >= CROWN_PRICE) {
       const r = await net.ask(p.pid, {
         mode: 'choice', title: '👑 Korona!', text: `Megveszed ${CROWN_PRICE} érméért? (${p.coins} 🪙 van)`,
@@ -388,6 +403,7 @@ export class BoardScene extends Scene {
     } else {
       await this.toast('👑 A korona itt van!', `Ehhez ${CROWN_PRICE} érme kell – ${p.name} zsebében csak ${p.coins} van.`, 1.8);
     }
+    if (this.current) b3.cam.follow(this.current.pid, 'near', 3.5);
   }
 
   async placeCrown() {
@@ -396,6 +412,7 @@ export class BoardScene extends Scene {
     const target = pick(cand.length ? cand : G.board.nodes.filter((n) => n.type === 'B'));
     const from = G.crownNode != null ? G.board.nodes[G.crownNode] : { x: 640, y: -60 };
     G.crownNode = null;
+    b3.cam.look(target.x, target.y, 'mid', 2.2);
     this.crownAnim = { from, to: target, t0: this.t, dur: 1.3 };
     sfx.whoosh();
     await this.sleep(1.3);
@@ -408,6 +425,7 @@ export class BoardScene extends Scene {
   }
 
   async land(p) {
+    b3.cam.follow(p.pid, 'close', 2.5);
     const node = G.board.nodes[p.node];
     const mult = isLastRounds() ? 2 : 1;
     switch (node.type) {
@@ -616,13 +634,19 @@ export class BoardScene extends Scene {
     }
   }
 
+  dicePos() {
+    const q = this.pawnXY(this.dice.p);
+    return { x: q.x, y: q.y - 70 };
+  }
+
   drawDice(c) {
     const d = this.dice;
+    const { x: dx, y: dy } = this.dicePos();
     const pop = d.rolling ? 1 : 1 + 0.4 * Math.max(0, 1 - (this.t - d.hitT) * 3);
     const shake = d.rolling ? Math.sin(time * 40) * 4 : 0;
     const s = 64 * pop;
     c.save();
-    c.translate(d.x + shake, d.y + (d.rolling ? Math.sin(time * 12) * 6 : 0));
+    c.translate(dx + shake, dy + (d.rolling ? Math.sin(time * 12) * 6 : 0));
     c.rotate(d.rolling ? Math.sin(time * 20) * 0.12 : 0);
     rr(c, -s / 2, -s / 2 + 6, s, s, 14);
     c.fillStyle = '#b8a9e8';
@@ -714,7 +738,7 @@ export class BoardScene extends Scene {
     const a = Math.min(1, (dur - age) * 5);
     c.save();
     c.globalAlpha = Math.max(0, a);
-    c.translate(640, 300);
+    c.translate(640, this.use3d ? 190 : 300);
     c.scale(s, s);
     panel(c, -400, -78, 800, sub ? 156 : 110, { fill: p ? shade(p.color, -0.5) : 'rgba(24,14,56,.94)', stroke: p ? p.color : '#ffd43b', lw: 5, r: 28 });
     text(c, title, 0, sub ? -30 : -23, { size: 50, stroke: '#1b1036', sw: 8, maxW: 760 });

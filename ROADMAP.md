@@ -21,11 +21,13 @@ Jelölés: ✅ kész · 🔨 folyamatban · ⬜ hátravan
 - Animációk: álló „lélegzés”, lépésnél ugrás + összenyomódás, öröm (érme/korona), szomorúság (piros mező)
 - Az aktuális játékos fölött lebegő jelölő
 
-## 3. ⬜ Kamerarendezés
+## 3. ✅ Kamerarendezés
 - Kör elején áttekintő nézet, utána a soron lévő játékos követése
 - Ráközelítés dobásnál és koronavásárlásnál
 - Elágazásnál a két út felé forduló nézet
 - Sima, rugós kameramozgás
+- Játék eleji nyitó kameramozgás: közelről a rajtnál, onnan kihúzódik az egész táblára
+- A korona új helyének megmutatása, mezőhatásnál közeli kép
 
 ## 4. ⬜ 3D kocka és effektek
 - Valódi 3D dobókocka, amit a játékos „megüt”
