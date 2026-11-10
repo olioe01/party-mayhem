@@ -8,6 +8,7 @@ import { G, ITEMS, CROWN_PRICE, MAX_ITEMS, addCoins, placeOf, isLastRounds } fro
 import * as net from './net.js';
 import { sfx, music } from './audio.js';
 import { MgSelectScene } from './mgflow.js';
+import * as b3 from './board3d.js';
 
 const TYPES = {
   B: { color: '#3b82f6', icon: '+' },
@@ -53,6 +54,16 @@ export function buildBoard() {
   prev.next = [bottom.id];
   return { nodes, start: 24, fork: 0 };
 }
+
+// 3D díszletek: [típus, x, y (2D px), méret]
+const DECO3D = [
+  ['castle', 380, 300, 1.15], ['volcano', 905, 290, 1.1], ['tree', 250, 205, 1], ['tree', 300, 455, 1.1],
+  ['pine', 520, 190, 1], ['pine', 470, 220, 0.8], ['tree', 520, 465, 0.9], ['palm', 760, 200, 1], ['palm', 1035, 440, 1],
+  ['cactus', 775, 455, 1], ['mushroom', 450, 410, 1.3], ['mushroom', 470, 430, 0.9], ['flowers', 250, 330, 1.4],
+  ['flowers', 1040, 215, 1.4], ['rock', 820, 375, 1.5], ['rock', 845, 390, 0.8], ['fountain', 255, 400, 1],
+  ['tent', 1000, 330, 1], ['flowers', 560, 330, 1.2], ['flowers', 720, 330, 1.2], ['tree', 1060, 290, 0.8],
+  ['pine', 220, 260, 0.8], ['tree', 700, 470, 0.8], ['rock', 580, 200, 0.9],
+];
 
 let staticCache = null;
 function renderStatic(board) {
@@ -175,7 +186,13 @@ export class BoardScene extends Scene {
   enter() {
     G.phase = 'board';
     music('board');
-    if (!staticCache || staticCache.board !== G.board) staticCache = { board: G.board, img: renderStatic(G.board) };
+    this.use3d = b3.available();
+    if (this.use3d) {
+      b3.build(G.board, TYPES, DECO3D);
+      b3.setVisible(true);
+    } else if (!staticCache || staticCache.board !== G.board) {
+      staticCache = { board: G.board, img: renderStatic(G.board) };
+    }
     this.anim = new Map();
     this.current = null;
     this.toastObj = null;
@@ -188,6 +205,8 @@ export class BoardScene extends Scene {
     for (const p of G.players) p.dispCoins = p.coins;
     this.run();
   }
+
+  exit() { b3.setVisible(false); }
 
   // ---------------------------------------------------------------- menet
   async run() {
@@ -326,7 +345,7 @@ export class BoardScene extends Scene {
   }
 
   hop(p, toId, dur = 0.28, height = 26) {
-    const from = this.pawnXY(p);
+    const from = this.groundXY(p);
     const to = G.board.nodes[toId];
     this.anim.set(p.pid, { from, to: { x: to.x, y: to.y }, t0: this.t, dur, height });
     sfx.step();
@@ -382,7 +401,8 @@ export class BoardScene extends Scene {
     G.crownNode = target.id;
     this.crownAnim = null;
     sfx.crown();
-    burst(target.x, target.y - 30, { n: 30, colors: ['#ffd43b', '#fff'], speed: 260 });
+    const tq = this.scr(target.x, target.y, 40);
+    burst(tq.x, tq.y, { n: 30, colors: ['#ffd43b', '#fff'], speed: 260 });
     await this.toast('👑 A korona új helye', `Lépj rá vagy haladj át rajta, és vedd meg ${CROWN_PRICE} érméért!`, 1.8);
   }
 
@@ -465,14 +485,38 @@ export class BoardScene extends Scene {
     return { x: n.x + Math.cos(a) * 17, y: n.y + Math.sin(a) * 12 };
   }
 
-  pawnXY(p) {
+  // talajpozíció (2D tábla-koordináták) + ugrásmagasság px-ben
+  groundXY(p) {
     const a = this.anim.get(p.pid);
     if (a) {
       const k = Math.min(1, (this.t - a.t0) / a.dur);
       const e = ease.inOutQuad(k);
-      return { x: lerp(a.from.x, a.to.x, e), y: lerp(a.from.y, a.to.y, e) - Math.sin(k * Math.PI) * a.height };
+      return { x: lerp(a.from.x, a.to.x, e), y: lerp(a.from.y, a.to.y, e), h: Math.sin(k * Math.PI) * a.height };
     }
-    return this.nodeSlot(p);
+    return { ...this.nodeSlot(p), h: 0 };
+  }
+
+  // tábla-pont -> képernyő (3D-ben vetítéssel)
+  scr(x, y, h = 0) {
+    return this.use3d ? b3.project(x, y, h) : { x, y: y - h };
+  }
+
+  // a bábu "közepe" a képernyőn – ehhez igazodnak a 2D effektek
+  pawnXY(p) {
+    const g = this.groundXY(p);
+    return this.use3d ? b3.project(g.x, g.y, g.h + 30) : { x: g.x, y: g.y - g.h };
+  }
+
+  crownPos() {
+    if (this.crownAnim) {
+      const a = this.crownAnim;
+      const k = Math.min(1, (this.t - a.t0) / a.dur);
+      const e = ease.inOutQuad(k);
+      return { x: lerp(a.from.x, a.to.x, e), y: lerp(a.from.y, a.to.y, e), h: Math.sin(k * Math.PI) * 200 };
+    }
+    if (G.crownNode == null) return null;
+    const n = G.board.nodes[G.crownNode];
+    return { x: n.x, y: n.y, h: 0 };
   }
 
   // ---------------------------------------------------------------- frissítés + rajz
@@ -488,6 +532,55 @@ export class BoardScene extends Scene {
   }
 
   draw(c) {
+    const nodes = G.board.nodes;
+    if (this.use3d) {
+      b3.render({
+        t: time,
+        crown: this.crownPos(),
+        pawns: G.players.map((p) => ({ p, ...this.groundXY(p), current: p === this.current })),
+      });
+    } else this.draw2dBoard(c);
+
+    // elágazás jelzése
+    if (this.forkFor) {
+      this.forkFor.next.forEach((nid, i) => {
+        const n = nodes[nid];
+        const q = this.scr(n.x, n.y);
+        const s = 1 + Math.sin(time * 6) * 0.15;
+        c.beginPath();
+        c.ellipse(q.x, q.y, NODE_R * 1.6 * s, NODE_R * (this.use3d ? 1.1 : 1.6) * s, 0, 0, Math.PI * 2);
+        c.strokeStyle = '#fff';
+        c.lineWidth = 4;
+        c.stroke();
+        text(c, i === 0 ? 'Körút ➡️' : '⬇️ Rövidítés', q.x + (i === 0 ? 34 : 0), q.y - 40,
+          { size: 20, stroke: '#1b1036', sw: 6, align: i === 0 ? 'left' : 'center' });
+      });
+    }
+
+    if (this.current) {
+      const { x, y } = this.pawnXY(this.current);
+      const top = y - (this.use3d ? 48 : 40);
+      text(c, '▼', x, top + Math.sin(time * 6) * 5, { size: 26, color: this.current.color, stroke: '#fff', sw: 5 });
+      if (this.stepsLeft > 0 && !this.dice) {
+        c.beginPath();
+        c.arc(x + 30, top + 8, 17, 0, Math.PI * 2);
+        c.fillStyle = '#fff';
+        c.fill();
+        text(c, String(this.stepsLeft), x + 30, top + 9, { size: 22, color: '#2b1055' });
+      }
+    }
+
+    // kocka
+    if (this.dice) this.drawDice(c);
+
+    this.drawHud(c);
+    if (this.card) this.drawCard(c);
+    if (this.shopFor) this.drawShop(c);
+    if (this.toastObj) this.drawToast(c);
+  }
+
+  // tartalék: a régi 2D tábla (ha nincs WebGL)
+  draw2dBoard(c) {
     c.drawImage(staticCache.img, 0, 0, W, H);
     const nodes = G.board.nodes;
 
@@ -511,21 +604,6 @@ export class BoardScene extends Scene {
       emoji(c, '👑', lerp(a.from.x, a.to.x, e), lerp(a.from.y, a.to.y, e) - 34 - Math.sin(k * Math.PI) * 180, 46 + Math.sin(k * Math.PI) * 30);
     }
 
-    // elágazás jelzése
-    if (this.forkFor) {
-      this.forkFor.next.forEach((nid, i) => {
-        const n = nodes[nid];
-        const s = 1 + Math.sin(time * 6) * 0.15;
-        c.beginPath();
-        c.arc(n.x, n.y, NODE_R * 1.5 * s, 0, Math.PI * 2);
-        c.strokeStyle = '#fff';
-        c.lineWidth = 4;
-        c.stroke();
-        text(c, i === 0 ? 'Körút ➡️' : '⬇️ Rövidítés', n.x + (i === 0 ? 40 : 0), n.y + (i === 0 ? -38 : 0) + (i === 1 ? 0 : 0),
-          { size: 20, stroke: '#1b1036', sw: 6, align: i === 0 ? 'left' : 'center' });
-      });
-    }
-
     // bábuk (y szerint rendezve)
     const pawns = G.players.map((p) => ({ p, ...this.pawnXY(p) })).sort((a, b) => a.y - b.y);
     for (const { p, x, y } of pawns) {
@@ -533,25 +611,6 @@ export class BoardScene extends Scene {
       const a = this.anim.get(p.pid);
       avatar(c, p, x, y - 10, cur ? 19 : 16, { ring: cur ? '#fff' : null, squash: a ? -0.06 : Math.sin(time * 4 + p.coins) * 0.02 });
     }
-    if (this.current) {
-      const { x, y } = this.pawnXY(this.current);
-      text(c, '▼', x, y - 50 + Math.sin(time * 6) * 5, { size: 26, color: this.current.color, stroke: '#fff', sw: 5 });
-      if (this.stepsLeft > 0 && !this.dice) {
-        c.beginPath();
-        c.arc(x + 26, y - 40, 17, 0, Math.PI * 2);
-        c.fillStyle = '#fff';
-        c.fill();
-        text(c, String(this.stepsLeft), x + 26, y - 39, { size: 22, color: '#2b1055' });
-      }
-    }
-
-    // kocka
-    if (this.dice) this.drawDice(c);
-
-    this.drawHud(c);
-    if (this.card) this.drawCard(c);
-    if (this.shopFor) this.drawShop(c);
-    if (this.toastObj) this.drawToast(c);
   }
 
   drawDice(c) {

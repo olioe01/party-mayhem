@@ -10,8 +10,9 @@ let scale = 1, dpr = 1;
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   scale = Math.min(innerWidth / W, innerHeight / H);
-  canvas.style.width = `${W * scale}px`;
-  canvas.style.height = `${H * scale}px`;
+  const stage = document.getElementById('stage');
+  stage.style.width = `${W * scale}px`;
+  stage.style.height = `${H * scale}px`;
   canvas.width = Math.round(W * scale * dpr);
   canvas.height = Math.round(H * scale * dpr);
 }

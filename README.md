@@ -42,6 +42,8 @@ npm start
 - A lobbyban a `+ Bot` gombbal (vagy a `B` billentyűvel) gépi játékosokat adhatsz hozzá.
 - Ha egy telefon lecsatlakozik, a játék nem áll meg: amíg vissza nem jön, egy bot játszik helyette. Újratöltés után ugyanaz a játékos marad.
 - Tesztelési URL-paraméterek: `/host?bots=3&rounds=2`, vagy egy adott minijáték: `/host?bots=3&mg=arena`.
+- A tábla 3D-ben (Three.js, WebGL) jelenik meg. Ha a gép nem tudja, automatikusan a 2D tábla jön; kényszeríteni a `/host?2d` címmel lehet.
+- A 3D továbbfejlesztés lépései: [ROADMAP.md](ROADMAP.md).
 
 ## WSL esetén: hogyan érik el a telefonok?
 
@@ -74,9 +76,9 @@ Tipp: ha a játékképernyőt eleve a gép LAN-címén nyitod meg (pl. `http://1
 ```
 server.js                 Express + Socket.IO: üzenettovábbítás a host és a telefonok között, QR-kód
 public/host.html          játékképernyő (canvas)
-public/js/host/           játéklogika: engine (rajz, jelenetek), board (tábla), mgflow (minijáték keret),
+public/js/host/           játéklogika: engine (rajz, jelenetek), board (tábla), board3d (3D tábla), mgflow (minijáték keret),
                           minigames/ (a 6 minijáték), lobby, final, net (kontrollerek + botok), audio
 public/index.html         telefonos kontroller (play.js, play.css)
 ```
 
-Minden grafika canvas-rajz és emoji, minden hang WebAudio-szintézis, külső asset nincs.
+A 3D modellek kódból épülnek (Three.js primitívek), a 2D grafika canvas-rajz és emoji, a hangok WebAudio-szintézissel készülnek. Külső asset nincs.

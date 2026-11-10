@@ -17,6 +17,7 @@ const server = http.createServer(app);
 const io = new Server(server, { pingInterval: 5000, pingTimeout: 8000 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules', 'three')));
 app.get('/host', (req, res) => res.sendFile(path.join(__dirname, 'public', 'host.html')));
 
 function lanAddresses() {

@@ -5,7 +5,7 @@ később egyenként kerülnek át 3D-be. A telefonos kontroller és a szerver v�
 
 Jelölés: ✅ kész · 🔨 folyamatban · ⬜ hátravan
 
-## 1. 🔨 3D alapok és 3D tábla
+## 1. ✅ 3D alapok és 3D tábla
 - Three.js beépítése helyben (`/vendor/three`, internet nélkül is megy)
 - Két réteg: alul a 3D (WebGL) vászon, felül a meglévő 2D-s felület (HUD, kártyák, feliratok)
 - 3D sziget, víz, utak, mezők ikonokkal, low-poly díszletek (fák, kastély, vulkán, sziklák)

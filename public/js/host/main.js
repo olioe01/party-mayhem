@@ -4,6 +4,7 @@ import { init, params } from './game.js';
 import { LobbyScene } from './lobby.js';
 import * as net from './net.js';
 import { G } from './state.js';
+import * as b3 from './board3d.js';
 
 init();
 
@@ -15,6 +16,7 @@ async function begin() {
   started = true;
   overlay.style.display = 'none';
   initAudio();
+  if (!params.has('2d')) b3.init(); // ?2d = régi 2D tábla
   try { await document.fonts.load('700 32px Fredoka'); } catch { /* offline: tartalék betűtípus */ }
   setScene(new LobbyScene(), true);
   start();
