@@ -15,8 +15,9 @@ Jelölés: ✅ kész · 🔨 folyamatban · ⬜ hátravan
 - A 2D-s effektek (kocka, lebegő szövegek, jelölők) a 3D pozíciókhoz igazodnak
 - Tartalék: ha nincs WebGL, a régi 2D tábla jelenik meg
 
-## 2. ⬜ Kódból épített 3D figurák
-- Gömb/kapszula test a játékos színében, szemek, állatfül/kalap az állatfigura szerint
+## 2. ✅ Kódból épített 3D figurák
+- 12 figura: Béka, Cica, Róka, Panda, Malac, Pingvin, Gumikacsa, Robot, Szellem, Királynő, Gyűszű, Fánk
+- Portréképek a 3D modellekből (`public/tools/portraits.html`) – ezek látszanak a HUD-on, a minijátékokban és a telefonon
 - Animációk: álló „lélegzés”, lépésnél ugrás + összenyomódás, öröm (érme/korona), szomorúság (piros mező)
 - Az aktuális játékos fölött lebegő jelölő
 

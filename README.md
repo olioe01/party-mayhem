@@ -38,6 +38,7 @@ npm start
 
 ### Hasznos
 
+- 12 választható figura (állatok és vicces tárgyfigurák), mindegyik kódból épített 3D modell. A portréképeik a `public/img/chars/` mappában vannak; ha egy figurát módosítasz a `chars3d.js`-ben, a `/tools/portraits.html` oldalon újragenerálhatod őket.
 - Az **első csatlakozó játékos a ⭐ VIP**: ő állítja a körök számát, és ő indítja a játékot a telefonjáról.
 - A lobbyban a `+ Bot` gombbal (vagy a `B` billentyűvel) gépi játékosokat adhatsz hozzá.
 - Ha egy telefon lecsatlakozik, a játék nem áll meg: amíg vissza nem jön, egy bot játszik helyette. Újratöltés után ugyanaz a játékos marad.

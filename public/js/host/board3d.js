@@ -2,7 +2,9 @@
 // itt ezeket képezzük le a 3D világba: 1 egység = 40 px.
 
 import * as THREE from 'three';
-import { W, H, avatar, emoji, text, shade } from './engine.js';
+import { mergeGeometries } from '/vendor/three/examples/jsm/utils/BufferGeometryUtils.js';
+import { W, H, emoji, text, shade } from './engine.js';
+import { build as buildChar } from './chars3d.js';
 
 const S = 40;
 const toWorld = (x, y, h = 0) => new THREE.Vector3((x - 640) / S, h / S, (y - 330) / S);
@@ -14,7 +16,13 @@ const pawns = new Map();
 let crown = null, crownGlow = null, crownLight = null;
 const animated = []; // díszletek, amik mozognak (füst, láng)
 
-const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0, flatShading: true, ...o });
+// azonos beállítású anyagok megosztva (így a statikus elemek összevonhatók)
+const matCache = new Map();
+function std(color, o = {}) {
+  const key = color + JSON.stringify(o);
+  if (!matCache.has(key)) matCache.set(key, new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0, flatShading: true, ...o }));
+  return matCache.get(key);
+}
 
 export function init() {
   glCanvas = document.getElementById('gl');
@@ -56,12 +64,14 @@ export function init() {
   scene.add(sea);
 
   buildCrown();
+  buildMarker();
   ok = true;
   setVisible(false);
   return true;
 }
 
 export const available = () => ok;
+export const stats = () => (renderer ? { ...renderer.info.render } : null);
 export function setVisible(v) { if (glCanvas) glCanvas.style.display = v ? 'block' : 'none'; }
 
 export function project(x, y, h = 0) {
@@ -187,7 +197,37 @@ export function build(board, types, deco) {
     r.scale.setScalar(s * 2);
     boardGroup.add(r);
   }
+  mergeStatic(boardGroup);
   scene.add(boardGroup);
+}
+
+// A mozdulatlan, egyanyagú elemeket anyagonként egy-egy hálóvá vonjuk össze:
+// kevesebb rajzolási hívás = gyorsabb (főleg gyengébb gépen).
+function mergeStatic(group) {
+  group.updateMatrixWorld(true);
+  const buckets = new Map();
+  const victims = [];
+  group.traverse((o) => {
+    if (!o.isMesh || Array.isArray(o.material) || o.userData.dynamic) return;
+    let p = o.parent, dyn = false;
+    while (p && p !== group) { if (p.userData.dynamic) dyn = true; p = p.parent; }
+    if (dyn) return;
+    let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    g.applyMatrix4(o.matrixWorld);
+    const key = `${o.material.uuid}|${o.castShadow}|${o.receiveShadow}`;
+    if (!buckets.has(key)) buckets.set(key, { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, geos: [] });
+    buckets.get(key).geos.push(g);
+    victims.push(o);
+  });
+  for (const o of victims) o.parent.remove(o);
+  for (const b of buckets.values()) {
+    const m = new THREE.Mesh(mergeGeometries(b.geos, false), b.mat);
+    m.castShadow = b.cast;
+    m.receiveShadow = b.recv;
+    group.add(m);
+  }
 }
 
 // ---------------------------------------------------------------- díszlet-modellek
@@ -259,6 +299,7 @@ const DECO = {
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.5), dark);
     pole.position.set(0, 2.35, 0);
     g.add(keep, keepRoof, door, pole, flag);
+    flag.userData.dynamic = true;
     animated.push((t) => { flag.rotation.y = Math.sin(t * 3) * 0.4; });
     return g;
   },
@@ -281,6 +322,7 @@ const DECO = {
     for (let i = 0; i < 4; i++) {
       const s = new THREE.Mesh(new THREE.IcosahedronGeometry(0.25, 1), new THREE.MeshStandardMaterial({ color: '#d1d5db', transparent: true, opacity: 0.7 }));
       s.castShadow = false;
+      s.userData.dynamic = true;
       g.add(s);
       smoke.push(s);
     }
@@ -335,6 +377,7 @@ const DECO = {
     t.rotation.y = Math.PI / 4;
     const fire = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.25, 6), new THREE.MeshStandardMaterial({ color: '#ffb020', emissive: '#ff6a00', emissiveIntensity: 1.5 }));
     fire.position.set(0.75, 0.13, 0.2);
+    fire.userData.dynamic = true;
     g.add(t, fire);
     animated.push((t2) => { fire.scale.y = 0.8 + Math.sin(t2 * 18) * 0.25; });
     return g;
@@ -374,59 +417,135 @@ function buildCrown() {
   scene.add(crown, crownGlow, crownLight);
 }
 
-// ---------------------------------------------------------------- bábuk
-function avatarTexture(p) {
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = 160;
-  avatar(cv.getContext('2d'), p, 80, 78, 66, { shadow: false });
-  const t = new THREE.CanvasTexture(cv);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+// ---------------------------------------------------------------- figurák
+const PAWN_SCALE = 1.2;
+let marker = null;
+
+function buildMarker() {
+  marker = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({ color: '#ffd43b', emissive: '#b8860b', emissiveIntensity: 0.6, metalness: 0.3, roughness: 0.3 });
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.5, 4), m);
+  tip.rotation.x = Math.PI;
+  marker.add(tip);
+  scene.add(marker);
 }
 
 function pawnFor(p) {
   let o = pawns.get(p.pid);
-  const key = p.color + p.animal;
+  const key = `${p.char}|${p.color}`;
   if (o && o.key === key) return o;
   if (o) scene.remove(o.group);
   const group = new THREE.Group();
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.14, 24), std(p.color, { flatShading: false, roughness: 0.4 }));
-  base.position.y = 0.07;
-  base.castShadow = true;
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.32, 8), std(shade(p.color, -0.3), { flatShading: false }));
-  post.position.y = 0.3;
-  post.castShadow = true;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: avatarTexture(p) }));
-  sprite.position.y = 0.82;
-  sprite.scale.setScalar(0.9);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.05, 8, 32), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+  const ch = buildChar(p.char);
+  ch.root.scale.setScalar(PAWN_SCALE);
+  group.add(ch.root);
+  // talapzat-gyűrű a játékos színében
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.05, 32), new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.4 }));
+  base.position.y = 0.025;
+  base.receiveShadow = true;
+  group.add(base);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.04, 8, 40), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
   ring.rotation.x = Math.PI / 2;
-  ring.position.y = 0.05;
-  group.add(base, post, sprite, ring);
+  ring.position.y = 0.04;
+  group.add(ring);
   scene.add(group);
-  o = { group, sprite, ring, key };
+  o = {
+    group, ch, ring, base, key,
+    yaw: 0, targetYaw: 0, last: null, still: 0, prevH: 0, land: 0,
+    emote: null, phase: Math.random() * 10, blinkAt: 1 + Math.random() * 3,
+  };
   pawns.set(p.pid, o);
   return o;
 }
 
+export function emote(pid, type) {
+  const o = pawns.get(pid);
+  if (o) o.emote = { type, t0: lastT };
+}
+
+const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+
+function animatePawn(o, d, t, dt) {
+  const w = toWorld(d.x, d.y, d.h);
+  // irány: mozgás közben a haladás felé, állva a kamera felé
+  if (o.last) {
+    const dx = w.x - o.last.x, dz = w.z - o.last.z;
+    if (Math.hypot(dx, dz) > 0.004) { o.targetYaw = Math.atan2(dx, dz); o.still = 0; }
+    else { o.still += dt; if (o.still > 0.5) o.targetYaw = 0; }
+  }
+  o.last = w.clone();
+  o.yaw += angDiff(o.yaw, o.targetYaw) * Math.min(1, dt * 10);
+
+  // ugrás / landolás
+  if (o.prevH > 0.5 && d.h <= 0.5) o.land = 1;
+  o.prevH = d.h;
+  o.land = Math.max(0, o.land - dt * 5);
+
+  let sy = 1 + Math.sin(t * 3 + o.phase) * 0.025; // lélegzés
+  let sx = 1, extraY = 0, spin = 0, tilt = 0;
+  if (d.h > 0.5) { sy *= 1.12; sx = 0.92; }
+  sy *= 1 - o.land * 0.28;
+  sx *= 1 + o.land * 0.22;
+
+  if (o.emote) {
+    const k = t - o.emote.t0;
+    const ty = o.emote.type;
+    if (ty === 'happy' && k < 0.8) {
+      extraY = Math.sin((k / 0.8) * Math.PI) * 0.55;
+      spin = (k / 0.8) * Math.PI * 2;
+    } else if (ty === 'cheer' && k < 1.8) {
+      const kk = (k % 0.6) / 0.6;
+      extraY = Math.sin(kk * Math.PI) * 0.7;
+      spin = (k / 1.8) * Math.PI * 4;
+    } else if (ty === 'sad' && k < 1.4) {
+      const a = Math.sin(Math.min(1, k / 0.3) * Math.PI / 2) * (1 - Math.max(0, (k - 1.0) / 0.4));
+      sy *= 1 - 0.18 * a;
+      sx *= 1 + 0.08 * a;
+      tilt = 0.35 * a;
+    } else o.emote = null;
+  }
+
+  o.group.position.set(w.x, w.y + extraY, w.z);
+  o.ch.root.rotation.y = o.yaw + spin;
+  o.ch.root.rotation.x = tilt;
+  o.ch.rig.scale.set(sx, sy, sx);
+  const cur = !!d.current;
+  o.ch.root.scale.setScalar(PAWN_SCALE * (cur ? 1.12 : 1));
+  o.ring.visible = cur;
+  if (cur) o.ring.scale.setScalar(1 + Math.sin(t * 6) * 0.08);
+
+  // pislogás
+  if (t > o.blinkAt) {
+    const b = t - o.blinkAt;
+    const sc = b < 0.12 ? 0.1 : 1;
+    o.ch.eyes.forEach((e) => { e.scale.y = sc; });
+    if (b > 0.12) o.blinkAt = t + 2 + Math.random() * 3;
+  }
+  o.ch.tick(t + o.phase);
+}
+
+let lastT = 0;
 // ---------------------------------------------------------------- rajz
 // st = { pawns: [{p, x, y, h, current}], crown: {x, y, h} | null, t }
 export function render(st) {
   if (!ok) return;
   syncSize();
+  const dt = Math.min(0.05, Math.max(0, st.t - lastT));
+  lastT = st.t;
   const seen = new Set();
+  let curPos = null;
   for (const d of st.pawns) {
     const o = pawnFor(d.p);
     seen.add(d.p.pid);
-    const w = toWorld(d.x, d.y, d.h);
-    o.group.position.set(w.x, w.y + 0.14, w.z);
-    const s = d.current ? 1.18 : 0.95;
-    const squash = d.h > 0 ? -0.06 : Math.sin(st.t * 4 + d.p.coins) * 0.02;
-    o.sprite.scale.set(s * (1 + squash), s * (1 - squash), 1);
-    o.ring.visible = !!d.current;
-    if (d.current) o.ring.scale.setScalar(1 + Math.sin(st.t * 6) * 0.08);
+    animatePawn(o, d, st.t, dt);
+    if (d.current) curPos = o.group.position;
   }
   for (const [pid, o] of pawns) if (!seen.has(pid)) { scene.remove(o.group); pawns.delete(pid); }
+  marker.visible = !!curPos;
+  if (curPos) {
+    marker.position.set(curPos.x, curPos.y + 1.9 + Math.sin(st.t * 5) * 0.1, curPos.z);
+    marker.rotation.y = st.t * 2.5;
+  }
 
   if (st.crown) {
     const w = toWorld(st.crown.x, st.crown.y, st.crown.h);

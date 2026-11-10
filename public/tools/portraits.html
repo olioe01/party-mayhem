@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <title>Party Mayhem – karakterportrék</title>
+  <style>
+    body { background: #2a1060; color: #fff; font-family: sans-serif; }
+    .grid { display: flex; flex-wrap: wrap; gap: 12px; }
+    figure { margin: 0; text-align: center; background: #ffffff14; border-radius: 12px; padding: 8px; }
+    img { width: 128px; height: 128px; display: block; }
+  </style>
+  <script type="importmap">{ "imports": { "three": "/vendor/three/build/three.module.js" } }</script>
+</head>
+<body>
+  <h1>Karakterportrék</h1>
+  <p>A 2D felület (HUD, minijátékok, telefon) ezeket a képeket használja. Ha egy figurát módosítasz a
+    <code>chars3d.js</code>-ben, nyisd meg ezt az oldalt, és mentsd a képeket a <code>public/img/chars/</code> mappába
+    (vagy futtasd újra a generáló szkriptet).</p>
+  <div class="grid" id="grid"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { build, CHAR_IDS } from '/js/host/chars3d.js';
+
+    const SIZE = 256;
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setSize(SIZE, SIZE);
+    renderer.setClearColor(0x000000, 0);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight('#ffffff', '#8b7bb8', 1.6));
+    const key = new THREE.DirectionalLight('#fff4e0', 2.2);
+    key.position.set(-1.5, 2.5, 3);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight('#c7d2fe', 1.2);
+    rim.position.set(2, 1.5, -2);
+    scene.add(rim);
+    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 20);
+
+    const out = {};
+    for (const id of CHAR_IDS) {
+      const ch = build(id);
+      ch.tick(0.6);
+      scene.add(ch.root);
+      const box = new THREE.Box3().setFromObject(ch.root);
+      const c = box.getCenter(new THREE.Vector3());
+      const h = Math.max(box.max.y - box.min.y, (box.max.x - box.min.x) * 1.05);
+      camera.position.set(c.x + 0.25 * h, c.y + 0.12 * h, c.z + h * 2.25);
+      camera.lookAt(c.x, c.y, c.z);
+      ch.root.rotation.y = -0.25;
+      renderer.render(scene, camera);
+      out[id] = renderer.domElement.toDataURL('image/png');
+      scene.remove(ch.root);
+      const fig = document.createElement('figure');
+      fig.innerHTML = `<img src="${out[id]}"><figcaption>${id}</figcaption>`;
+      document.getElementById('grid').append(fig);
+    }
+    window.portraits = out;
+  </script>
+</body>
+</html>

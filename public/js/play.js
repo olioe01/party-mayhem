@@ -22,6 +22,7 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const buzz = (p) => { try { navigator.vibrate?.(p); } catch { /* nem támogatott */ } };
   const send = (msg) => socket.emit('player:input', { ...msg, lid: layout?.id });
+  const charSrc = (id) => `/img/chars/${encodeURIComponent(id)}.png`;
 
   // ------------------------------------------------------------ kapcsolat
   function setConn(msg) {
@@ -51,7 +52,7 @@
   function setMe(me) {
     top.hidden = false;
     document.documentElement.style.setProperty('--pc', me.color);
-    document.getElementById('me-av').textContent = me.animal;
+    document.getElementById('me-av').innerHTML = me.char ? `<img src="${charSrc(me.char)}" alt="">` : '';
     document.getElementById('me-name').textContent = me.name;
     document.getElementById('me-stats').textContent = me.playing
       ? `🪙 ${me.coins}   👑 ${me.crowns}   ${(me.items || []).join(' ')}`
@@ -96,7 +97,8 @@
   // ------------------------------------------------------------ elrendezések
   const R = {
     wait(l) {
-      screen.innerHTML = `<div class="center"><div class="big-emoji">${esc(l.icon || '⏳')}</div>
+      const ico = l.char ? `<img class="char-big" src="${charSrc(l.char)}" alt="">` : esc(l.icon || '⏳');
+      screen.innerHTML = `<div class="center"><div class="big-emoji">${ico}</div>
         <h2>${esc(l.title || 'Várj…')}</h2><p>${esc(l.text || '')}</p></div>`;
     },
 
@@ -110,7 +112,7 @@
     lobby(l) {
       screen.innerHTML = `
         <h2>Válassz figurát!</h2>
-        <div class="animals">${l.animals.map((a) => `<button class="animal ${a === l.animal ? 'sel' : ''}" data-a="${esc(a)}" ${l.taken.includes(a) ? 'disabled' : ''}>${esc(a)}</button>`).join('')}</div>
+        <div class="animals">${l.chars.map((ch) => `<button class="animal ${ch.id === l.char ? 'sel' : ''}" data-a="${esc(ch.id)}" ${l.taken.includes(ch.id) ? 'disabled' : ''}><img src="${charSrc(ch.id)}" alt=""><span>${esc(ch.name)}</span></button>`).join('')}</div>
         <button class="ready-btn ${l.ready ? 'on' : ''}" id="ready">${l.ready ? '✔ Kész vagyok!' : '👉 Kész vagyok'}</button>
         ${l.vip ? `
           <div class="vip">
@@ -120,7 +122,7 @@
             <p class="muted">${l.canStart ? `Mindenki kész! (${l.count} játékos)` : 'Várj, amíg mindenki kész lesz…'}</p>
           </div>`
           : `<p class="muted">${l.rounds} kör · ${l.count} játékos · a ⭐ VIP indítja a játékot</p>`}`;
-      screen.querySelectorAll('.animal').forEach((b) => b.addEventListener('click', () => send({ t: 'animal', v: b.dataset.a })));
+      screen.querySelectorAll('.animal').forEach((b) => b.addEventListener('click', () => send({ t: 'char', v: b.dataset.a })));
       document.getElementById('ready').addEventListener('click', () => { buzz(30); send({ t: 'ready', v: !l.ready }); });
       screen.querySelectorAll('.rounds button').forEach((b) => b.addEventListener('click', () => send({ t: 'rounds', v: Number(b.dataset.r) })));
       document.getElementById('start')?.addEventListener('click', () => send({ t: 'start' }));
@@ -128,7 +130,7 @@
 
     choice(l) {
       screen.innerHTML = `<h2>${esc(l.title)}</h2>${l.text ? `<p>${esc(l.text)}</p>` : ''}
-        <div class="choices">${l.options.map((o, i) => `<button class="choice" data-i="${i}" ${o.disabled ? 'disabled' : ''}>${esc(o.label)}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</button>`).join('')}</div>`;
+        <div class="choices">${l.options.map((o, i) => `<button class="choice" data-i="${i}" ${o.disabled ? 'disabled' : ''}>${o.char ? `<img class="choice-av" src="${charSrc(o.char)}" alt="">` : ''}${esc(o.label)}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</button>`).join('')}</div>`;
       let done = false;
       screen.querySelectorAll('.choice').forEach((b) => b.addEventListener('click', () => {
         if (done) return;

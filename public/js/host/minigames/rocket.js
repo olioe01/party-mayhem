@@ -1,5 +1,5 @@
 // Rakétaverseny – gyors koppintás
-import { W, H, text, rr, emoji, burst, shade, rand, vgrad, time } from '../engine.js';
+import { W, H, text, rr, emoji, burst, shade, rand, vgrad, time, charImage } from '../engine.js';
 import { sfx } from '../audio.js';
 import { timerHud } from './common.js';
 import * as net from '../net.js';
@@ -156,7 +156,7 @@ class Rocket {
     c.beginPath(); c.arc(x, y + 4, 17, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#bfe3ff';
     c.beginPath(); c.arc(x, y + 4, 14, 0, Math.PI * 2); c.fill();
-    emoji(c, p.animal, x, y + 4, 20);
+    charImage(c, p, x, y + 4, 26);
   }
 }
 

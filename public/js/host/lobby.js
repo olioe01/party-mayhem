@@ -1,7 +1,7 @@
 // Lobby: csatlakozás QR-kóddal, figura választás, indítás
 
 import { Scene, W, H, text, panel, avatar, emoji, rr, vgrad, burst, shade, ease, time } from './engine.js';
-import { G, ANIMALS, MAX_PLAYERS, byPid } from './state.js';
+import { G, CHARS, MAX_PLAYERS, byPid, setChar } from './state.js';
 import * as net from './net.js';
 import { sfx, music } from './audio.js';
 import { startGame } from './game.js';
@@ -47,9 +47,9 @@ export class LobbyScene extends Scene {
     for (const p of G.players) {
       net.setCtrl(p.pid, {
         mode: 'lobby',
-        animals: ANIMALS,
-        taken: G.players.filter((q) => q !== p).map((q) => q.animal),
-        animal: p.animal,
+        chars: CHARS.map((c) => ({ id: c.id, name: c.name })),
+        taken: G.players.filter((q) => q !== p).map((q) => q.char),
+        char: p.char,
         ready: p.ready,
         vip: p.pid === G.vip,
         rounds: G.maxRounds,
@@ -65,8 +65,8 @@ export class LobbyScene extends Scene {
   input(pid, msg) {
     const p = byPid(pid);
     if (!p) return;
-    if (msg.t === 'animal' && ANIMALS.includes(msg.v) && !G.players.some((q) => q !== p && q.animal === msg.v)) {
-      p.animal = msg.v;
+    if (msg.t === 'char' && CHARS.some((c) => c.id === msg.v) && !G.players.some((q) => q !== p && q.char === msg.v)) {
+      setChar(p, msg.v);
       sfx.pop();
     } else if (msg.t === 'ready') {
       p.ready = !!msg.v;

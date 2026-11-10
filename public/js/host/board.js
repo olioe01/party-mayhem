@@ -212,7 +212,7 @@ export class BoardScene extends Scene {
   async run() {
     if (this.intro) {
       await this.toast('Kezdődik a játék!', `${G.maxRounds} kör · a legtöbb 👑 koronát gyűjtő nyer`, 2.4);
-      await this.toast('Sorrend', G.players.map((p) => `${p.animal} ${p.name}`).join('  →  '), 2.6);
+      await this.toast('Sorrend', G.players.map((p) => p.name).join('  →  '), 2.6);
       await this.placeCrown();
     }
     if (this.dead) return;
@@ -236,7 +236,7 @@ export class BoardScene extends Scene {
     this.current = p;
     sfx.select();
     for (const q of G.players) {
-      if (q !== p) net.setCtrl(q.pid, { mode: 'wait', icon: p.animal, title: `${p.name} következik`, text: 'Figyeld a képernyőt!' });
+      if (q !== p) net.setCtrl(q.pid, { mode: 'wait', char: p.char, title: `${p.name} következik`, text: 'Figyeld a képernyőt!' });
     }
     await this.sleep(0.5);
     let dice = 1;
@@ -281,7 +281,7 @@ export class BoardScene extends Scene {
       return 1;
     }
     if (key === 'thief') {
-      const options = others.map((q) => ({ label: `${q.animal} ${q.name}`, sub: `${q.coins} 🪙`, disabled: q.coins === 0 }));
+      const options = others.map((q) => ({ label: q.name, sub: `${q.coins} 🪙`, char: q.char, disabled: q.coins === 0 }));
       if (options.every((o) => o.disabled)) {
         await this.toast('🧤 Zsebtolvaj', 'Senkinek nincs érméje… 😅', 1.5);
         return 1;
@@ -376,6 +376,7 @@ export class BoardScene extends Scene {
         p.crowns++;
         net.pushStatus(p.pid);
         net.vibrate(p.pid, [80, 60, 80, 60, 200]);
+        if (this.use3d) b3.emote(p.pid, 'cheer');
         sfx.crown();
         const { x, y } = this.pawnXY(p);
         burst(x, y, { n: 60, colors: ['#ffd43b', '#fff3bf', '#fab005', p.color], speed: 500 });
@@ -426,6 +427,7 @@ export class BoardScene extends Scene {
   }
 
   coinFx(p, d) {
+    if (this.use3d && d) b3.emote(p.pid, d > 0 ? 'happy' : 'sad');
     const { x, y } = this.pawnXY(p);
     floatText(x, y - 36, `${d >= 0 ? '+' : ''}${d} 🪙`, d >= 0 ? '#ffd43b' : '#ff8787', 32);
     if (d > 0) { burst(x, y, { n: 14, colors: ['#ffd43b', '#fab005', '#fff3bf'] }); sfx.coin(); }
@@ -482,7 +484,8 @@ export class BoardScene extends Scene {
     if (here.length <= 1) return { x: n.x, y: n.y };
     const i = here.indexOf(p);
     const a = (i / here.length) * Math.PI * 2 - Math.PI / 2;
-    return { x: n.x + Math.cos(a) * 17, y: n.y + Math.sin(a) * 12 };
+    const rx = this.use3d ? 19 + here.length * 3 : 17, ry = this.use3d ? 13 + here.length * 2 : 12;
+    return { x: n.x + Math.cos(a) * rx, y: n.y + Math.sin(a) * ry };
   }
 
   // talajpozíció (2D tábla-koordináták) + ugrásmagasság px-ben
@@ -504,7 +507,7 @@ export class BoardScene extends Scene {
   // a bábu "közepe" a képernyőn – ehhez igazodnak a 2D effektek
   pawnXY(p) {
     const g = this.groundXY(p);
-    return this.use3d ? b3.project(g.x, g.y, g.h + 30) : { x: g.x, y: g.y - g.h };
+    return this.use3d ? b3.project(g.x, g.y, g.h + 50) : { x: g.x, y: g.y - g.h };
   }
 
   crownPos() {
@@ -559,8 +562,8 @@ export class BoardScene extends Scene {
 
     if (this.current) {
       const { x, y } = this.pawnXY(this.current);
-      const top = y - (this.use3d ? 48 : 40);
-      text(c, '▼', x, top + Math.sin(time * 6) * 5, { size: 26, color: this.current.color, stroke: '#fff', sw: 5 });
+      const top = y - (this.use3d ? 34 : 40);
+      if (!this.use3d) text(c, '▼', x, top + Math.sin(time * 6) * 5, { size: 26, color: this.current.color, stroke: '#fff', sw: 5 });
       if (this.stepsLeft > 0 && !this.dice) {
         c.beginPath();
         c.arc(x + 30, top + 8, 17, 0, Math.PI * 2);
@@ -647,7 +650,8 @@ export class BoardScene extends Scene {
     if (this.current) {
       const p = this.current;
       panel(c, 490, 6, 300, 48, { r: 24, fill: shade(p.color, -0.45), stroke: p.color });
-      text(c, `${p.animal} ${p.name} köre`, 640, 31, { size: 24, maxW: 280 });
+      avatar(c, p, 516, 30, 17, { shadow: false });
+      text(c, `${p.name} köre`, 652, 31, { size: 24, maxW: 250 });
     }
 
     // játékoskártyák

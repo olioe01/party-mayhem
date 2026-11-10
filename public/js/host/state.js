@@ -3,7 +3,26 @@
 import * as net from './net.js';
 
 export const COLORS = ['#ff4d6d', '#4dabf7', '#51cf66', '#ffd43b', '#b197fc', '#ff922b', '#22d3ee', '#f783ac'];
-export const ANIMALS = ['🐸', '🐱', '🐶', '🦊', '🐼', '🐵', '🐰', '🐯', '🐨', '🐷', '🐧', '🦄'];
+// figurák: a 3D modell a chars3d.js-ben, a portrékép a public/img/chars/<id>.png
+export const CHARS = [
+  { id: 'frog', name: 'Béka', emoji: '🐸' },
+  { id: 'cat', name: 'Cica', emoji: '🐱' },
+  { id: 'fox', name: 'Róka', emoji: '🦊' },
+  { id: 'panda', name: 'Panda', emoji: '🐼' },
+  { id: 'pig', name: 'Malac', emoji: '🐷' },
+  { id: 'penguin', name: 'Pingvin', emoji: '🐧' },
+  { id: 'duck', name: 'Gumikacsa', emoji: '🦆' },
+  { id: 'robot', name: 'Robot', emoji: '🤖' },
+  { id: 'ghost', name: 'Szellem', emoji: '👻' },
+  { id: 'queen', name: 'Királynő', emoji: '👸' },
+  { id: 'thimble', name: 'Gyűszű', emoji: '🔘' },
+  { id: 'donut', name: 'Fánk', emoji: '🍩' },
+];
+export const charById = (id) => CHARS.find((c) => c.id === id) || CHARS[0];
+export function setChar(p, id) {
+  p.char = charById(id).id;
+  p.animal = charById(id).emoji; // tartalék, ha a portrékép nem töltődik be
+}
 export const MAX_PLAYERS = 8;
 export const CROWN_PRICE = 20;
 export const MAX_ITEMS = 3;
@@ -30,11 +49,12 @@ export const humans = () => G.players.filter((p) => !p.isBot);
 
 export function newPlayer(pid, name, isBot) {
   const usedC = new Set(G.players.map((p) => p.color));
-  const usedA = new Set(G.players.map((p) => p.animal));
+  const usedC2 = new Set(G.players.map((p) => p.char));
+  const ch = CHARS.find((c) => !usedC2.has(c.id)) || CHARS[0];
   return {
     pid, name, isBot, connected: true, ready: isBot,
     color: COLORS.find((c) => !usedC.has(c)) || COLORS[0],
-    animal: ANIMALS.find((a) => !usedA.has(a)) || ANIMALS[0],
+    char: ch.id, animal: ch.emoji,
     coins: 10, crowns: 0, node: 0, items: [],
     dispCoins: 10,
     stats: { mgCoins: 0, steps: 0, maxCoins: 10, mgWins: 0 },
@@ -52,7 +72,7 @@ export function statusOf(pid) {
   const p = byPid(pid);
   if (!p) return null;
   return {
-    name: p.name, color: p.color, animal: p.animal, coins: p.coins, crowns: p.crowns,
+    name: p.name, color: p.color, char: p.char, coins: p.coins, crowns: p.crowns,
     items: p.items.map((i) => ITEMS[i].icon), playing: G.phase !== 'lobby',
   };
 }

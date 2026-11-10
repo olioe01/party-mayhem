@@ -104,6 +104,28 @@ export function panel(c, x, y, w, h, o = {}) {
   c.restore();
 }
 
+// karakter portrék (public/img/chars/<id>.png)
+const charImgs = new Map();
+export function charImg(id) {
+  let im = charImgs.get(id);
+  if (!im) {
+    im = new Image();
+    im.src = `/img/chars/${id}.png`;
+    charImgs.set(id, im);
+  }
+  return im.complete && im.naturalWidth ? im : null;
+}
+
+export function charImage(c, p, x, y, size, alpha = 1) {
+  const im = p.char ? charImg(p.char) : null;
+  if (im) {
+    c.save();
+    c.globalAlpha *= alpha;
+    c.drawImage(im, x - size / 2, y - size / 2, size, size);
+    c.restore();
+  } else emoji(c, p.animal, x, y, size * 0.8, alpha);
+}
+
 export function avatar(c, p, x, y, r, o = {}) {
   const { squash = 0, alpha = 1, ring = null, shadow = true, flash = false, gray = false } = o;
   c.save();
@@ -135,11 +157,22 @@ export function avatar(c, p, x, y, r, o = {}) {
     c.stroke();
   }
   if (gray) c.globalAlpha *= 0.6;
-  c.fillStyle = '#000';
-  c.font = `${r * 1.1}px ${EMOJI}`;
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.fillText(p.animal, 0, r * 0.1);
+  const im = p.char ? charImg(p.char) : null;
+  if (im) {
+    c.save();
+    c.beginPath();
+    c.arc(0, 0, r * 0.94, 0, Math.PI * 2);
+    c.clip();
+    if (gray) c.filter = 'grayscale(1)';
+    c.drawImage(im, -r * 1.12, -r * 1.02, r * 2.24, r * 2.24);
+    c.restore();
+  } else {
+    c.fillStyle = '#000';
+    c.font = `${r * 1.1}px ${EMOJI}`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(p.animal, 0, r * 0.1);
+  }
   c.restore();
 }
 
@@ -286,7 +319,7 @@ function frame(now) {
 }
 
 function step(now) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const dt = Math.min(0.1, (now - last) / 1000); // 10 FPS alatt lassul csak a játékidő
   last = now;
   time += dt;
   if (fadeDir === 1) {
