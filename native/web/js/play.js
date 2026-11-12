@@ -1,0 +1,349 @@
+// Party Mayhem – telefonos kontroller (natív változat: sima WebSocket a játék exe-jéhez)
+// Kis átjáró, ami a korábbi socket.io-s on/emit felületet adja WebSocket fölött.
+function connectHost() {
+  const handlers = {};
+  let ws = null;
+  let queue = [];
+  let wasOpen = false;
+  let retry = 0;
+  const fire = (evt, data) => (handlers[evt] || []).forEach((f) => f(data));
+  const open = () => {
+    const port = Number(location.port || 80) + 1;
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:${port}/`);
+    ws.onopen = () => {
+      retry = 0;
+      wasOpen = true;
+      const q = queue;
+      queue = [];
+      fire('connect');
+      q.forEach((m) => ws.send(m));
+    };
+    ws.onmessage = (e) => {
+      let m;
+      try { m = JSON.parse(e.data); } catch { return; }
+      if (m && m.e) fire(m.e, m.d);
+    };
+    ws.onclose = () => {
+      if (wasOpen) fire('disconnect');
+      wasOpen = false;
+      retry = Math.min(retry + 1, 6);
+      setTimeout(open, 300 * retry);
+    };
+    ws.onerror = () => { try { ws.close(); } catch { /* */ } };
+  };
+  open();
+  // ha a telefon felébred alvásból, azonnal kapcsolódjon újra
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && ws && ws.readyState > 1) open();
+  });
+  return {
+    on(evt, f) { (handlers[evt] = handlers[evt] || []).push(f); },
+    emit(evt, data) {
+      const m = JSON.stringify({ e: evt, d: data });
+      if (ws && ws.readyState === 1) ws.send(m);
+      else if (evt !== 'player:input') queue.push(m);
+    },
+  };
+}
+
+(() => {
+  const socket = connectHost();
+  const screen = document.getElementById('screen');
+  const top = document.getElementById('top');
+  const conn = document.getElementById('conn');
+  const connText = document.getElementById('conn-text');
+
+  const store = {
+    get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* privát mód */ } },
+  };
+  let pid = store.get('pm_pid');
+  if (!pid) {
+    pid = (crypto.randomUUID ? crypto.randomUUID() : `${Math.random().toString(36).slice(2)}${Date.now()}`);
+    store.set('pm_pid', pid);
+  }
+  let name = store.get('pm_name') || '';
+  let joined = false;
+  let layout = null;
+
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const buzz = (p) => { try { navigator.vibrate?.(p); } catch { /* nem támogatott */ } };
+  const send = (msg) => socket.emit('player:input', { ...msg, lid: layout?.id });
+  const charSrc = (id) => `/img/chars/${encodeURIComponent(id)}.png`;
+
+  // ------------------------------------------------------------ kapcsolat
+  function setConn(msg) {
+    conn.hidden = !msg;
+    if (msg) connText.textContent = msg;
+  }
+  socket.on('connect', () => {
+    setConn(null);
+    if (joined) socket.emit('player:join', { pid, name });
+  });
+  socket.on('disconnect', () => setConn('Megszakadt a kapcsolat – újracsatlakozás…'));
+  socket.on('host:offline', () => setConn('Várakozás a játékképernyőre…\n(indítsd el a játékot a gépen)'));
+  socket.on('host:online', () => setConn(null));
+  socket.on('ctrl', (msg) => {
+    if (!msg) return;
+    if (msg.kind === 'layout') {
+      layout = msg.layout;
+      if (layout.me) setMe(layout.me);
+      render();
+    } else if (msg.kind === 'status') {
+      if (msg.me) setMe(msg.me);
+    } else if (msg.kind === 'vibrate') {
+      buzz(msg.pattern);
+    }
+  });
+
+  function setMe(me) {
+    top.hidden = false;
+    document.documentElement.style.setProperty('--pc', me.color);
+    document.getElementById('me-av').innerHTML = me.char ? `<img src="${charSrc(me.char)}" alt="">` : '';
+    document.getElementById('me-name').textContent = me.name;
+    document.getElementById('me-stats').textContent = me.playing
+      ? (me.stats || `🪙 ${me.coins}   👑 ${me.crowns}   ${(me.items || []).join(' ')}`)
+      : 'Lobby';
+  }
+
+  document.getElementById('fs').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else document.documentElement.requestFullscreen?.().catch(() => {});
+  });
+
+  // ------------------------------------------------------------ csatlakozás
+  function renderJoin() {
+    top.hidden = true;
+    screen.innerHTML = `
+      <div class="center" style="gap:18px">
+        <div class="logo">PARTY<br>MAYHEM</div>
+        <p class="muted">Írd be a neved, és csatlakozz!</p>
+        <input id="name" maxlength="14" placeholder="A neved" autocomplete="off" value="${esc(name)}">
+        <button class="primary" id="join">Csatlakozás 🎉</button>
+      </div>`;
+    const inp = document.getElementById('name');
+    const go = () => {
+      const n = inp.value.trim();
+      if (!n) { inp.focus(); inp.style.borderColor = '#ff6b6b'; return; }
+      name = n.slice(0, 14);
+      store.set('pm_name', name);
+      try { sessionStorage.setItem('pm_joined', '1'); } catch { /* */ }
+      join();
+    };
+    document.getElementById('join').addEventListener('click', go);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  }
+
+  function join() {
+    joined = true;
+    socket.emit('player:join', { pid, name });
+    screen.innerHTML = '<div class="center"><div class="big-emoji">🛰️</div><h2>Csatlakozás…</h2></div>';
+    navigator.wakeLock?.request('screen').catch(() => {});
+  }
+
+  // ------------------------------------------------------------ elrendezések
+  const R = {
+    wait(l) {
+      const ico = l.char ? `<img class="char-big" src="${charSrc(l.char)}" alt="">` : esc(l.icon || '⏳');
+      screen.innerHTML = `<div class="center"><div class="big-emoji">${ico}</div>
+        <h2>${esc(l.title || 'Várj…')}</h2><p>${esc(l.text || '')}</p></div>`;
+    },
+
+    result(l) {
+      screen.innerHTML = `<div class="center"><div class="big-emoji" style="font-size:110px">${esc(l.icon || '🎉')}</div>
+        <h2 style="font-size:38px">${esc(l.title)}</h2><p style="font-size:24px;color:#ffe066">${esc(l.text || '')}</p>
+        ${l.again ? '<button class="primary" id="again" style="margin-top:20px">🔄 Új játék</button>' : ''}</div>`;
+      document.getElementById('again')?.addEventListener('click', () => send({ t: 'again' }));
+    },
+
+    lobby(l) {
+      screen.innerHTML = `
+        <h2>Válassz figurát!</h2>
+        <div class="animals">${l.chars.map((ch) => `<button class="animal ${ch.id === l.char ? 'sel' : ''}" data-a="${esc(ch.id)}" ${l.taken.includes(ch.id) ? 'disabled' : ''}><img src="${charSrc(ch.id)}" alt=""><span>${esc(ch.name)}</span></button>`).join('')}</div>
+        <button class="ready-btn ${l.ready ? 'on' : ''}" id="ready">${l.ready ? '✔ Kész vagyok!' : '👉 Kész vagyok'}</button>
+        ${l.vip ? `
+          <div class="vip">
+            <h3>⭐ Te vagy a VIP</h3>
+            <div class="modes">${(l.gameModes || []).map((m) => `<button data-m="${esc(m.id)}" class="${m.id === l.gameMode ? 'sel' : ''}">${esc(m.icon)} ${esc(m.name)}</button>`).join('')}</div>
+            ${l.gameMode === 'mountain'
+              ? '<p class="muted">Az első nyer, aki felér a csúcsra</p>'
+              : `<div class="rounds">${l.roundOptions.map((r) => `<button data-r="${r}" class="${r === l.rounds ? 'sel' : ''}">${r} kör</button>`).join('')}</div>`}
+            <button class="start" id="start" ${l.canStart ? '' : 'disabled'}>▶ Játék indítása</button>
+            <p class="muted">${l.canStart ? `Mindenki kész! (${l.count} játékos)` : 'Várj, amíg mindenki kész lesz…'}</p>
+          </div>`
+          : `<p class="muted">${l.gameMode === 'mountain' ? '⛰️ Hegymászás' : `${l.rounds} kör`} · ${l.count} játékos · a ⭐ VIP indítja a játékot</p>`}`;
+      screen.querySelectorAll('.animal').forEach((b) => b.addEventListener('click', () => send({ t: 'char', v: b.dataset.a })));
+      document.getElementById('ready').addEventListener('click', () => { buzz(30); send({ t: 'ready', v: !l.ready }); });
+      screen.querySelectorAll('.rounds button').forEach((b) => b.addEventListener('click', () => send({ t: 'rounds', v: Number(b.dataset.r) })));
+      screen.querySelectorAll('.modes button').forEach((b) => b.addEventListener('click', () => send({ t: 'mode', v: b.dataset.m })));
+      document.getElementById('start')?.addEventListener('click', () => send({ t: 'start' }));
+    },
+
+    choice(l) {
+      screen.innerHTML = `<h2>${esc(l.title)}</h2>${l.text ? `<p>${esc(l.text)}</p>` : ''}
+        <div class="choices">${l.options.map((o, i) => `<button class="choice" data-i="${i}" ${o.disabled ? 'disabled' : ''}>${o.char ? `<img class="choice-av" src="${charSrc(o.char)}" alt="">` : ''}${esc(o.label)}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</button>`).join('')}</div>`;
+      let done = false;
+      screen.querySelectorAll('.choice').forEach((b) => b.addEventListener('click', () => {
+        if (done) return;
+        done = true;
+        b.classList.add('picked');
+        screen.querySelectorAll('.choice').forEach((x) => { x.disabled = true; });
+        buzz(30);
+        send({ t: 'choice', v: Number(b.dataset.i) });
+      }));
+    },
+
+    tap(l) {
+      screen.innerHTML = `<div class="tapwrap"><button class="tapbtn" id="tap">${esc(l.label || 'NYOMD!')}</button><p>${esc(l.hint || '')}</p></div>`;
+      const b = document.getElementById('tap');
+      let once = false;
+      b.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        if (!l.rapid && once) return;
+        once = true;
+        send({ t: 'tap' });
+        buzz(l.rapid ? 8 : 40);
+        b.classList.add('hit');
+        setTimeout(() => b.classList.remove('hit'), 70);
+      });
+    },
+
+    ready(l) {
+      screen.innerHTML = `<div class="center"><div class="big-emoji">${esc(l.icon || '🎮')}</div><h2 style="font-size:32px">${esc(l.title)}</h2>
+        <p>${esc(l.text || '')}</p><button class="primary" id="rdy" style="margin-top:22px">✋ Kész vagyok!</button></div>`;
+      document.getElementById('rdy').addEventListener('click', (e) => {
+        e.target.disabled = true;
+        e.target.textContent = 'Várakozás…';
+        buzz(30);
+        send({ t: 'ready' });
+      });
+    },
+
+    stick(l) {
+      screen.innerHTML = `${l.title ? `<h2>${esc(l.title)}</h2>` : ''}<div class="stickwrap">
+        <div class="stickzone" id="zone"><div class="base" id="base"><div class="knob" id="knob"></div></div></div>
+        ${l.noBtn ? '' : `<button class="actbtn" id="act">${esc(l.btn || 'AKCIÓ')}</button>`}</div>`;
+      const zone = document.getElementById('zone');
+      const base = document.getElementById('base');
+      const knob = document.getElementById('knob');
+      let active = null, last = 0, lx = 0, ly = 0, cur = { x: 0, y: 0 };
+      const push = (force) => {
+        const now = performance.now();
+        if (!force && now - last < 45) return;
+        if (!force && Math.abs(cur.x - lx) < 0.04 && Math.abs(cur.y - ly) < 0.04) return;
+        last = now; lx = cur.x; ly = cur.y;
+        send({ t: 'stick', x: +cur.x.toFixed(2), y: +cur.y.toFixed(2) });
+      };
+      const move = (e) => {
+        const r = base.getBoundingClientRect();
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2, max = r.width / 2;
+        let dx = e.clientX - cx, dy = e.clientY - cy;
+        const d = Math.hypot(dx, dy);
+        if (d > max) { dx *= max / d; dy *= max / d; }
+        knob.style.transform = `translate(${dx}px, ${dy}px)`;
+        cur = { x: dx / max, y: dy / max };
+        push(false);
+      };
+      zone.addEventListener('pointerdown', (e) => { e.preventDefault(); active = e.pointerId; zone.setPointerCapture(e.pointerId); move(e); });
+      zone.addEventListener('pointermove', (e) => { if (e.pointerId === active) move(e); });
+      const end = (e) => {
+        if (e.pointerId !== active) return;
+        active = null;
+        knob.style.transform = '';
+        cur = { x: 0, y: 0 };
+        push(true);
+      };
+      zone.addEventListener('pointerup', end);
+      zone.addEventListener('pointercancel', end);
+      const act = document.getElementById('act');
+      act?.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        if (act.classList.contains('cool')) return;
+        send({ t: 'btn' });
+        buzz(50);
+        act.classList.add('hit', 'cool');
+        setTimeout(() => act.classList.remove('hit'), 100);
+        setTimeout(() => act.classList.remove('cool'), Number(l.cd) || 1300);
+      });
+      // folyamatos frissítés, hogy a host biztosan megkapja az aktuális irányt
+      const iv = setInterval(() => { if (!document.body.contains(zone)) { clearInterval(iv); return; } if (active !== null) push(true); }, 150);
+    },
+
+    lr() {
+      screen.innerHTML = '<div class="lr"><button data-v="-1">◀</button><button data-v="1">▶</button></div>';
+      const held = new Map();
+      let lastV = 0;
+      const update = () => {
+        const vals = new Set(held.values());
+        const v = (vals.has(1) ? 1 : 0) - (vals.has(-1) ? 1 : 0);
+        screen.querySelectorAll('.lr button').forEach((b) => b.classList.toggle('hit', vals.has(Number(b.dataset.v))));
+        if (v !== lastV) { lastV = v; send({ t: 'lr', v }); }
+      };
+      screen.querySelectorAll('.lr button').forEach((b) => {
+        b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); held.set(e.pointerId, Number(b.dataset.v)); buzz(10); update(); });
+        const up = (e) => { held.delete(e.pointerId); update(); };
+        b.addEventListener('pointerup', up);
+        b.addEventListener('pointercancel', up);
+      });
+    },
+
+    pads(l) {
+      screen.innerHTML = `<h2>${esc(l.title || '')}</h2><div class="pads ${l.enabled ? '' : 'off'}">${l.pads.map((p, i) => `<button class="pad" data-i="${i}" style="background:${esc(p.color)}">${esc(p.shape)}</button>`).join('')}</div>`;
+      screen.querySelectorAll('.pad').forEach((b) => b.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        if (!l.enabled) return;
+        send({ t: 'pad', v: Number(b.dataset.i) });
+        buzz(20);
+        b.classList.add('hit');
+        setTimeout(() => b.classList.remove('hit'), 140);
+      }));
+    },
+
+    // poharak (vagy bármilyen számozott gombsor): egyet lehet választani
+    cups(l) {
+      const n = Math.max(2, Math.min(8, Number(l.n) || 3));
+      screen.innerHTML = `<h2>${esc(l.title || 'Melyik alatt van?')}</h2>
+        <div class="cups" style="grid-template-columns:repeat(${n <= 4 ? n : Math.ceil(n / 2)}, 1fr)">${Array.from({ length: n }, (_, i) => `<button class="cup" data-i="${i}"><span>🥤</span>${i + 1}</button>`).join('')}</div>
+        <p class="muted">${esc(l.hint || 'Balról jobbra számozva, ahogy a képernyőn látod')}</p>`;
+      let done = false;
+      screen.querySelectorAll('.cup').forEach((b) => b.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        if (done) return;
+        done = true;
+        b.classList.add('picked');
+        screen.querySelectorAll('.cup').forEach((x) => { if (x !== b) x.disabled = true; });
+        buzz(40);
+        send({ t: 'cup', v: Number(b.dataset.i) });
+      }));
+    },
+
+    number(l) {
+      let val = '';
+      screen.innerHTML = `<h2>${esc(l.title || 'Írd be a számot')}</h2><div class="numdisp" id="disp">&nbsp;</div>
+        <div class="keypad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button data-k="${n}">${n}</button>`).join('')}
+        <button class="del" data-k="del">⌫</button><button data-k="0">0</button><button class="ok" data-k="ok">✓</button></div>`;
+      const disp = document.getElementById('disp');
+      screen.querySelectorAll('.keypad button').forEach((b) => b.addEventListener('click', () => {
+        const k = b.dataset.k;
+        buzz(10);
+        if (k === 'del') val = val.slice(0, -1);
+        else if (k === 'ok') { if (val !== '') send({ t: 'num', v: Number(val) }); return; }
+        else if (val.length < 3) val = (val === '0' ? '' : val) + k;
+        disp.innerHTML = val || '&nbsp;';
+      }));
+    },
+  };
+
+  function render() {
+    if (!layout) return;
+    (R[layout.mode] || R.wait)(layout);
+  }
+
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+
+  let auto = false;
+  try { auto = sessionStorage.getItem('pm_joined') === '1' && !!name; } catch { /* */ }
+  if (auto) join();
+  else renderJoin();
+})();

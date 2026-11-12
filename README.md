@@ -55,6 +55,10 @@ A Színmemória legfeljebb 10 színig tart: aki odáig eljut, holtversenyben nye
 - A tábla 3D-ben (Three.js, WebGL) jelenik meg. Ha a gép nem tudja, automatikusan a 2D tábla jön; kényszeríteni a `/host?2d` címmel lehet.
 - A 3D továbbfejlesztés lépései: [ROADMAP.md](ROADMAP.md).
 
+## 🖥️ Natív változat (Windows .exe)
+
+A `native/` mappában van a játék Godot 4-re átírt, **önállóan futó** változata. Nem kell hozzá Node.js vagy böngésző: a `PartyMayhem.exe` beépített webszervert futtat a telefonoknak, a csatlakozás ugyanúgy QR-kóddal megy. Új elemek is kerültek bele: figuránként saját kocka, barátok, csapatos (2 a 2 és 1 a 3 elleni) minijátékok, sziget-események, rejtett dobozok, 3 új 3D minijáték és saját zene. A részletek a [native/README.md](native/README.md) fájlban vannak.
+
 ## WSL esetén: hogyan érik el a telefonok?
 
 WSL2 alatt a szerver alapból egy belső (172.x.x.x) címen fut, ezt a telefonok nem látják. Három megoldás közül választhatsz:
