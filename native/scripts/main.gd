@@ -17,6 +17,7 @@ var _shot_at := -1.0
 var _graveyard: Array = []
 var fps_show := false
 var _esc_t := -10.0
+var online: OnlineUI
 
 
 func _ready() -> void:
@@ -32,6 +33,8 @@ func _ready() -> void:
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.draw.connect(_draw_overlay)
 	layer.add_child(overlay)
+	online = OnlineUI.new()
+	layer.add_child(online)
 
 	Net.player_joined.connect(Game.on_join)
 	Net.player_left.connect(Game.on_leave)
@@ -43,12 +46,13 @@ func _ready() -> void:
 	Game.after_boot(args)
 
 
+## Jelenetváltás. Maga a csere mindig egy játéklépés elején történik (lásd step), mert ott
+## készül az állapotmentés, amiből minden gép – a hoszt is – folytatja.
 func set_scene(s: GameScene, instant := false) -> void:
-	if instant or scene == null:
-		_swap(s)
-		return
 	_next = s
 	_fade_dir = 1
+	if instant or scene == null:
+		_fade = 1.0
 
 
 func _swap(s: GameScene) -> void:
@@ -61,32 +65,72 @@ func _swap(s: GameScene) -> void:
 			_graveyard.pop_front().queue_free()
 	particles.clear()
 	Net.cancel_asks()
+	Sync.clear_timers()
 	scene = s
 	add_child(s)
 	s.enter()
 
 
 func _process(dt: float) -> void:
-	dt = min(dt, 0.1)
+	Sync.frame(min(dt, 0.1))    # ez hívja a step()-et annyiszor, ahány játéklépés esedékes
+	overlay.queue_redraw()
+
+
+## Egy játéklépés (fix 1/60 mp). Online játékban minden gép ugyanazokat a lépéseket futtatja.
+func step(dt: float) -> void:
 	time += dt
-	if _fade_dir == 1:
+	if Sync.client:
+		_step_fade_client(dt)
+	elif _fade_dir == 1:
 		_fade += dt * 4.0
-		if _fade >= 1.0:
-			_fade = 1.0
-			_swap(_next)
-			_next = null
-			_fade_dir = -1
+		if _fade >= 1.0 and _next:
+			var bytes := Snapshot.capture(_next)
+			Sync.host_checkpoint(bytes)
+			_resume_from(bytes)
 	elif _fade_dir == -1:
-		_fade -= dt * 4.0
-		if _fade <= 0.0:
-			_fade = 0.0
-			_fade_dir = 0
+		_fade_out(dt)
 	if scene:
 		scene._tick(dt)
 		if not scene.dead:
 			scene.update(dt)
 	_update_particles(dt)
-	overlay.queue_redraw()
+
+
+func _fade_out(dt: float) -> void:
+	_fade -= dt * 4.0
+	if _fade <= 0.0:
+		_fade = 0.0
+		_fade_dir = 0
+
+
+## Vendég gépen a jelenetváltást a hoszt mentése vezérli: ha megjött erre a lépésre, abból
+## folytatunk; ha a saját játékunk váltana, de a hoszté még nem, sötétben megvárjuk.
+func _step_fade_client(dt: float) -> void:
+	var ck = Sync.take_checkpoint()
+	if ck == null:
+		if _fade_dir == 1:
+			_fade = min(1.0, _fade + dt * 4.0)
+		elif _fade_dir == -1:
+			_fade_out(dt)
+		return
+	if not Sync.is_init_checkpoint():
+		var mine := PackedByteArray()
+		if _fade_dir == 1 and _fade + dt * 4.0 >= 1.0 and _next:
+			mine = Snapshot.capture(_next)
+		Sync.note_checkpoint(mine == ck, mine, ck)
+	_resume_from(ck)
+
+
+func _resume_from(bytes: PackedByteArray) -> void:
+	var s := Snapshot.restore(bytes)
+	if s == null:
+		if Sync.client:
+			Sync.leave()
+		return
+	_fade = 1.0
+	_fade_dir = -1
+	_next = null
+	_swap(s)
 
 
 func _draw_overlay() -> void:
@@ -104,10 +148,27 @@ func _draw_overlay() -> void:
 		D.text(c, "%d FPS" % Engine.get_frames_per_second(), 1270, 710, {"size": 14, "align": "right", "color": Color(1, 1, 1, 0.7)})
 
 
+## A játékra ható billentyűk és kattintások a közös eseménysoron mennek át (online játékban
+## a hoszthoz), és a sim_key / sim_click hajtja végre őket minden gépen ugyanabban a lépésben.
+func sim_key(code: int) -> void:
+	if scene and not scene.dead and _fade_dir == 0:
+		var e := InputEventKey.new()
+		e.keycode = code as Key
+		e.pressed = true
+		scene.key(e)
+
+
+func sim_click(pos: Vector2) -> void:
+	if scene and not scene.dead and _fade_dir == 0:
+		scene.click(pos)
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if online.is_open():
+		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if scene and _fade_dir == 0:
-			scene.click(overlay.get_local_mouse_position())
+		var mp := overlay.get_local_mouse_position()
+		Sync.submit({"k": "click", "x": mp.x, "y": mp.y})
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		var k: int = event.keycode
@@ -124,8 +185,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_esc_t = time
 		elif k == KEY_F12:
 			screenshot("user://screenshot_%d.png" % Time.get_unix_time_from_system())
-		elif scene and _fade_dir == 0:
-			scene.key(event)
+		else:
+			Sync.submit({"k": "key", "c": k})
 
 
 func screenshot(path: String) -> void:
@@ -144,11 +205,11 @@ func burst(x: float, y: float, o := {}) -> void:
 	var spread: float = o.get("spread", TAU)
 	var angle: float = o.get("angle", -PI / 2)
 	for i in n:
-		var a := angle + (randf() - 0.5) * spread
-		var s := speed * (0.35 + randf() * 0.65)
-		particles.append({"x": x, "y": y, "vx": cos(a) * s, "vy": sin(a) * s, "life": life * (0.6 + randf() * 0.4), "max": life,
-			"size": size * (0.6 + randf() * 0.7), "color": Color(str(colors.pick_random())), "shape": o.get("shape", "circle"),
-			"g": o.get("gravity", 700.0), "drag": o.get("drag", 0.6), "rot": randf() * 6.0, "vr": randf_range(-10, 10)})
+		var a := angle + (FX.f() - 0.5) * spread
+		var s := speed * (0.35 + FX.f() * 0.65)
+		particles.append({"x": x, "y": y, "vx": cos(a) * s, "vy": sin(a) * s, "life": life * (0.6 + FX.f() * 0.4), "max": life,
+			"size": size * (0.6 + FX.f() * 0.7), "color": Color(str(FX.pick(colors))), "shape": o.get("shape", "circle"),
+			"g": o.get("gravity", 700.0), "drag": o.get("drag", 0.6), "rot": FX.f() * 6.0, "vr": FX.fr(-10, 10)})
 
 
 func float_text(x: float, y: float, s: String, color := Color.WHITE, size := 34) -> void:
@@ -159,9 +220,9 @@ func float_text(x: float, y: float, s: String, color := Color.WHITE, size := 34)
 func confetti(n := 120) -> void:
 	var cols := ["#ffd43b", "#ff4d6d", "#4dabf7", "#51cf66", "#b197fc", "#ff922b"]
 	for i in n:
-		particles.append({"x": randf_range(0, 1280), "y": randf_range(-200, -10), "vx": randf_range(-60, 60), "vy": randf_range(80, 260),
-			"life": 4.0, "max": 4.0, "size": randf_range(6, 12), "color": Color(cols.pick_random()), "shape": "rect",
-			"g": 60.0, "drag": 0.0, "rot": randf_range(0, 6), "vr": randf_range(-8, 8)})
+		particles.append({"x": FX.fr(0, 1280), "y": FX.fr(-200, -10), "vx": FX.fr(-60, 60), "vy": FX.fr(80, 260),
+			"life": 4.0, "max": 4.0, "size": FX.fr(6, 12), "color": Color(FX.pick(cols)), "shape": "rect",
+			"g": 60.0, "drag": 0.0, "rot": FX.fr(0, 6), "vr": FX.fr(-8, 8)})
 
 
 func _update_particles(dt: float) -> void:

@@ -18,6 +18,7 @@ G="*res://scripts/core/state.gd"
 Net="*res://scripts/core/net.gd"
 Audio="*res://scripts/core/audio.gd"
 Game="*res://scripts/core/game.gd"
+Sync="*res://scripts/core/sync.gd"
 
 [display]
 

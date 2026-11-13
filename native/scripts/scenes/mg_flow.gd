@@ -237,7 +237,7 @@ class IntroScene:
 	var limit := 30.0
 	var started := false
 
-	func _init(m: Dictionary, tm: Array) -> void:
+	func _init(m := {}, tm := []) -> void:
 		mg = m
 		teams = tm
 
@@ -322,7 +322,7 @@ class PlayScene:
 	var go_t := 0.0
 	var end_t := 0.0
 
-	func _init(m: Dictionary, tm: Array) -> void:
+	func _init(m := {}, tm := []) -> void:
 		mg = m
 		teams = tm
 
@@ -414,7 +414,7 @@ class ResultScene:
 	var done := false
 	var team_win := -2     # -2: nem csapatos, -1: döntetlen
 
-	func _init(m: Dictionary, r: Array, tm: Array) -> void:
+	func _init(m := {}, r := [], tm := []) -> void:
 		mg = m
 		ranking = r
 		teams = tm

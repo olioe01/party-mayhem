@@ -1,6 +1,6 @@
 class_name Mountain3D
 extends Node3D
-## 3D hegy a hegymászós játékmódhoz: kúp alakú hegy, körbefutó párkány-út, mezők, kapuk,
+## 3D hegy a hegymászós játékmódhoz: kúp alakú hegy, körbefutó párkány-út, mezők, akadályok,
 ## díszletek, bábuk és a hegy körül keringő kamera.
 
 const ML = preload("res://scripts/world/mountain_layout.gd")
@@ -28,7 +28,10 @@ var sun: DirectionalLight3D
 var env: Environment
 var pawns := {}          # pid -> {group, model, ring, char_id, yaw, target_yaw, last, still, prev_h}
 var tiles := {}          # mező -> Node3D
-var gates := {}          # mező -> {root, door, label}
+var gates := {}          # mező -> {root, kind, bricks, extra, label, open, ...}
+var debris: Array = []   # szétrepülő faldarabok: {n, v, w, age}
+var wind: Node3D = null
+var wind_power := 0.0
 var marker: Node3D
 var animated: Array = []
 var t := 0.0
@@ -44,10 +47,12 @@ var cam_rad := 38.0
 var cam_y := 15.0
 var cam_look_pos := Vector3(0, 7.5, 0)
 var orbit := 0.0
+var cam_side := 0.16      # ennyivel néz előre a menetirányba (negatív: hátulról mutatja a jelenetet)
 
 
 static func get_for(l: Dictionary) -> Mountain3D:
-	if instance and is_instance_valid(instance) and is_same(instance.layout, l):
+	if instance and is_instance_valid(instance) and instance.layout.get("seed") == l.get("seed"):
+		instance.layout = l      # jelenetváltáskor az állapot új szótárba töltődik vissza
 		return instance
 	if instance and is_instance_valid(instance):
 		instance.queue_free()
@@ -365,66 +370,482 @@ func flash_tile(id: int) -> void:
 	tw.tween_property(g, "scale", Vector3.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
 
-# ------------------------------------------------------------------ kapuk
+# ------------------------------------------------------------------ akadályok
+## Három akadály zárja el az utat: téglafal (be kell ütni), bástya (ágyúval kell szétlőni)
+## és egy alvó jeti (hógolyóval kell felébreszteni). A helyi +x a menetirány, a +z kifelé mutat.
 func _gates() -> void:
-	var stone := smat("#9aa3ad", {"rough": 0.9})
-	var dark := smat("#6b7280", {"rough": 0.9})
-	var wood := smat("#8a5a2b")
-	var iron := smat("#3f3f46", {"rough": 0.4, "metal": 0.6})
 	for g in layout.gates:
 		var s: float = g.node + 0.5
 		var root := Node3D.new()
 		root.position = ML.pos(s)
-		root.rotation.y = ML.angle(s)   # helyi +x = menetirány, helyi +z = kifelé
+		root.rotation.y = ML.angle(s)
 		add_child(root)
-		for sz in [-1.0, 1.0]:
-			Chars3D.box(root, 0.5, 2.3, 0.42, stone, Vector3(0, 1.15, sz * (ML.PATH_W + 0.05)))
-			Chars3D.box(root, 0.6, 0.22, 0.52, dark, Vector3(0, 2.36, sz * (ML.PATH_W + 0.05)))
-		Chars3D.box(root, 0.52, 0.42, ML.PATH_W * 2 + 0.6, stone, Vector3(0, 2.6, 0))
-		Chars3D.box(root, 0.6, 0.16, ML.PATH_W * 2 + 0.9, dark, Vector3(0, 2.88, 0))
-		var door := Node3D.new()
-		root.add_child(door)
-		for k in 6:
-			Chars3D.box(door, 0.12, 2.2, 0.2, wood, Vector3(0, 1.1, -ML.PATH_W + 0.3 + k * (ML.PATH_W * 2 - 0.6) / 5.0))
-		for yy in [0.55, 1.65]:
-			Chars3D.box(door, 0.16, 0.14, ML.PATH_W * 2 - 0.3, iron, Vector3(0, yy, 0))
-		Chars3D.cyl(door, 0.2, 0.2, 0.2, smat("#ffd43b", {"metal": 0.7, "rough": 0.3, "emit": "#ffb000", "emit_e": 0.4}), -0.12, 1.1, 0, 12, Vector3(0, 0, PI / 2))
+		var o := {"root": root, "kind": g.kind, "bricks": [], "extra": [], "open": false, "lit": false, "awake": false}
+		match g.kind:
+			"cannon": _build_bastion(root, o)
+			"yeti": _build_yeti(root, o)
+			_: _build_wall(root, o)
 		var lab := Label3D.new()
-		lab.text = "🔒 %d+" % g.need
+		lab.text = "🎲 4 · 5 · 6"
 		lab.font = D.font
-		lab.font_size = 110
-		lab.pixel_size = 0.0085
+		lab.font_size = 96
+		lab.pixel_size = 0.0045
 		lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		lab.no_depth_test = true
-		lab.outline_size = 26
+		lab.outline_size = 24
 		lab.outline_modulate = D.DARK
 		lab.modulate = Color("#ffd43b")
-		lab.position = Vector3(0, 3.7, 0)
+		lab.position = Vector3(0, 2.75 if g.kind == "cannon" else 2.4, 0)
 		root.add_child(lab)
-		gates[g.node] = {"root": root, "door": door, "label": lab}
+		o["label"] = lab
+		gates[g.node] = o
 		if g.open:
 			_set_gate_open(g.node)
 
 
+func _wall_blocks(root: Node3D, o: Dictionary, rows: int, bh: float, thick: float, unit: float, cols: Array) -> void:
+	var z0 := -1.0
+	var z1 := 1.0
+	for r in rows:
+		var edges: Array = [z0]
+		var z := z0 + (unit / 2 if r % 2 else unit)
+		while z < z1 - 0.05:
+			edges.append(z)
+			z += unit
+		edges.append(z1)
+		for i in edges.size() - 1:
+			var w: float = edges[i + 1] - edges[i]
+			var b := Chars3D.box(root, thick, bh * 0.93, w - 0.025, smat(cols[(r * 3 + i) % cols.size()], {"rough": 0.9}),
+				Vector3(0, bh * (r + 0.5), (edges[i] + edges[i + 1]) / 2))
+			o.bricks.append(b)
+	o.extra.append(Chars3D.box(root, thick - 0.1, rows * bh - 0.03, z1 - z0 - 0.05, smat("#d8cbb8"), Vector3(0, rows * bh / 2, 0)))
+
+
+func _build_wall(root: Node3D, o: Dictionary) -> void:
+	_wall_blocks(root, o, 6, 0.3, 0.36, 0.5, ["#c2553d", "#b34a36", "#cf6a4a", "#a8432f"])
+	for i in 4:
+		o.bricks.append(Chars3D.box(root, 0.46, 0.1, 0.5, smat("#9aa3ad", {"rough": 0.9}), Vector3(0, 1.85, -0.75 + i * 0.5)))
+	# repedés és célpont a falon, a mászók felé néző oldalon
+	var crack := smat("#3b1f17")
+	for d in [[1.05, 0.1, 0.5, 0.5], [0.75, -0.12, 0.34, -0.7], [1.3, -0.1, 0.3, 0.9], [0.95, 0.38, 0.26, -0.3]]:
+		o.extra.append(Chars3D.box(root, 0.02, d[2], 0.035, crack, Vector3(-0.19, d[0], d[1]), Vector3(d[3], 0, 0)))
+	var fist := Label3D.new()
+	fist.text = "👊"
+	fist.font = D.font
+	fist.font_size = 110
+	fist.pixel_size = 0.006
+	fist.rotation.y = -PI / 2
+	fist.position = Vector3(-0.21, 1.25, 0.45)
+	root.add_child(fist)
+	o.extra.append(fist)
+
+
+func _build_bastion(root: Node3D, o: Dictionary) -> void:
+	_wall_blocks(root, o, 3, 0.64, 0.56, 0.68, ["#8d96a3", "#7b8492", "#9aa3ad", "#6f7885"])
+	for i in 4:
+		o.bricks.append(Chars3D.box(root, 0.62, 0.3, 0.34, smat("#6f7885", {"rough": 0.9}), Vector3(0, 2.07, -0.83 + i * 0.553)))
+	# céltábla
+	var rings := [[0.46, "#e03131"], [0.32, "#ffffff"], [0.18, "#e03131"]]
+	for i in rings.size():
+		o.extra.append(Chars3D.cyl(root, rings[i][0], rings[i][0], 0.03, smat(rings[i][1], {"rough": 0.6}), -0.29 - i * 0.012, 1.0, 0.1, 20, Vector3(0, 0, PI / 2)))
+	# ágyú egy kiugró fa-állványon, az út külső oldalán
+	var wood := smat("#8a5a2b")
+	var wood_d := smat("#5c3d1e")
+	var iron := smat("#2f3640", {"metal": 0.6, "rough": 0.4})
+	var cpos := Vector3(-0.95, 0.0, 1.5)
+	Chars3D.box(root, 1.2, 0.1, 1.15, wood, cpos + Vector3(0, -0.02, -0.05))
+	for i in 4:
+		Chars3D.box(root, 0.03, 0.105, 1.15, wood_d, cpos + Vector3(-0.45 + i * 0.3, -0.02, -0.05))
+	for sx in [-0.45, 0.45]:
+		Chars3D.box(root, 0.09, 1.25, 0.09, wood_d, cpos + Vector3(sx, -0.5, 0.0), Vector3(0.85, 0, 0))
+		Chars3D.cyl(root, 0.05, 0.06, 0.5, wood_d, cpos.x + sx, 0.22, cpos.z + 0.45, 6)
+	var aim := Vector3(0, 0.95, 0.1) - (cpos + Vector3(0, 0.45, 0))
+	var cn := Chars3D.grp(root, cpos + Vector3(0, 0.03, 0), Vector3(0, atan2(-aim.z, aim.x), 0))
+	Chars3D.box(cn, 0.62, 0.14, 0.36, wood_d, Vector3(-0.02, 0.22, 0))
+	for sz in [-1.0, 1.0]:
+		Chars3D.lcyl(cn, 0.22, 0.22, 0.07, wood, -0.02, 0.22, sz * 0.22, 10, Vector3(PI / 2, 0, 0))
+		Chars3D.lcyl(cn, 0.07, 0.07, 0.09, iron, -0.02, 0.22, sz * 0.23, 6, Vector3(PI / 2, 0, 0))
+	var barrel := Chars3D.grp(cn, Vector3(0, 0.42, 0), Vector3(0, 0, 0.3))
+	Chars3D.lcyl(barrel, 0.14, 0.19, 0.9, iron, 0.2, 0, 0, 10, Vector3(0, 0, -PI / 2))
+	Chars3D.lcyl(barrel, 0.175, 0.175, 0.07, smat("#ffd43b", {"metal": 0.7, "rough": 0.3}), 0.63, 0, 0, 10, Vector3(0, 0, -PI / 2))
+	Chars3D.lcyl(barrel, 0.2, 0.2, 0.06, smat("#ffd43b", {"metal": 0.7, "rough": 0.3}), -0.05, 0, 0, 10, Vector3(0, 0, -PI / 2))
+	Chars3D.lsphere(barrel, 0.19, iron, -0.25, 0, 0, 1, 1, 1, 8, 5)
+	Chars3D.cyl(barrel, 0.012, 0.012, 0.16, smat("#e9d8a6"), -0.22, 0.24, 0, 5)
+	var spark := Chars3D.lsphere(barrel, 0.06, smat("#ffe066", {"emit": "#ff9500", "emit_e": 3.0}), -0.22, 0.34, 0, 1, 1, 1, 5, 3)
+	spark.visible = false
+	var flash := Chars3D.lsphere(barrel, 0.3, smat("#fff3bf", {"emit": "#ffb000", "emit_e": 4.0, "unshaded": true}), 0.8, 0, 0, 1, 1, 1, 7, 4)
+	flash.visible = false
+	o["cannon"] = cn
+	o["barrel"] = barrel
+	o["spark"] = spark
+	o["flash"] = flash
+	animated.append(func(tt):
+		if o.lit and is_instance_valid(spark):
+			spark.scale = Vector3.ONE * 0.06 * (1.0 + sin(tt * 40.0) * 0.5)
+			spark.position.y = 0.34 - fmod(tt * 0.2, 0.1))
+
+
+func _build_yeti(root: Node3D, o: Dictionary) -> void:
+	var C := Chars3D
+	var fur := smat("#f4f7fb", {"rough": 0.95})
+	var fur_d := smat("#d5e3f0", {"rough": 0.95})
+	var blue := smat("#8fd0f5", {"rough": 0.6})
+	var dark := smat("#274060", {"rough": 0.5})
+	var ivory := smat("#f5ecd7")
+	# jégpárkány az út külső szélén: ide ül ki, ha felébredt
+	var ice := smat("#cfeaff", {"rough": 0.15, "metal": 0.2, "emit": "#74c0fc", "emit_e": 0.25})
+	C.box(root, 1.9, 0.24, 1.55, ice, Vector3(0.2, -0.1, 1.72))
+	C.box(root, 1.96, 0.08, 1.6, smat("#ffffff", {"rough": 0.9}), Vector3(0.2, 0.04, 1.72))
+	for i in 5:
+		C.lcone(root, 0.16, 0.5 + (i % 2) * 0.3, ice, -0.55 + i * 0.38, -0.45 - (i % 2) * 0.15, 1.5 + (i % 3) * 0.3, 5, Vector3(PI, 0, 0))
+	var y := C.grp(root, Vector3(0, 0, 0.1), Vector3(0, -PI / 2, 0))
+	# test, has, lábak
+	C.lsphere(y, 0.72, fur, 0, 0.66, 0, 1.1, 1.0, 0.95, 10, 7)
+	C.lsphere(y, 0.46, fur_d, 0, 0.58, 0.42, 1, 1, 0.5, 8, 6)
+	for i in 7:
+		var a := TAU * i / 7
+		C.lcone(y, 0.2, 0.34, fur, sin(a) * 0.66, 0.2, cos(a) * 0.6, 4, Vector3(PI, a, 0))
+	for s in [-1, 1]:
+		C.lsphere(y, 0.24, fur, s * 0.4, 0.18, 0.5, 1, 0.8, 1.5, 7, 5)
+		C.lsphere(y, 0.23, blue, s * 0.42, 0.2, 0.86, 1, 1.1, 0.5, 7, 5)
+		for k in [-1, 0, 1]:
+			C.lsphere(y, 0.05, dark, s * 0.42 + k * 0.11, 0.36, 0.95, 1, 1, 0.6, 5, 3)
+	# fej, arc
+	var head := C.grp(y, Vector3(0, 1.38, 0.1))
+	C.lsphere(head, 0.47, fur, 0, 0, 0, 1.08, 0.95, 1, 10, 7)
+	C.lsphere(head, 0.31, blue, 0, -0.05, 0.3, 1.15, 0.9, 0.55, 8, 6)
+	for s in [-1, 1]:
+		C.lcone(head, 0.085, 0.3, ivory, s * 0.36, 0.38, 0.0, 6, Vector3(0, 0, -s * 0.55))
+		C.lcone(head, 0.12, 0.25, fur, s * 0.5, -0.1, 0.05, 4, Vector3(0, 0, -s * 1.9))
+		C.lcone(head, 0.04, 0.11, ivory, s * 0.1, -0.2, 0.44, 4)
+	for i in 3:
+		C.lcone(head, 0.1, 0.26, fur, (i - 1) * 0.13, 0.48, 0.05, 4, Vector3(0.2, 0, -(i - 1) * 0.35))
+	C.lsphere(head, 0.06, dark, 0, -0.03, 0.48, 1.3, 0.8, 0.8, 6, 4)
+	C.box(head, 0.2, 0.03, 0.03, dark, Vector3(0, -0.21, 0.44))
+	var eyes: Array = C.eyes(head, 0.08, 0.42, 0.15, 0.085)
+	for e in eyes:
+		e.scale.y = 0.12
+	# karok
+	var arms: Array = []
+	for s in [-1, 1]:
+		var arm := C.grp(y, Vector3(s * 0.74, 1.02, 0.08), Vector3(0, 0, s * 0.22))
+		C.lsphere(arm, 0.21, fur, 0, -0.32, 0, 1, 1.9, 1, 7, 5)
+		C.lsphere(arm, 0.19, blue, 0, -0.72, 0.03, 1, 0.9, 1, 7, 5)
+		arms.append(arm)
+	var zzz := Label3D.new()
+	zzz.text = "💤"
+	zzz.font = D.font
+	zzz.font_size = 120
+	zzz.pixel_size = 0.007
+	zzz.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	zzz.no_depth_test = true
+	zzz.position = Vector3(0.45, 2.35, 0.1)
+	root.add_child(zzz)
+	o["yeti"] = y
+	o["yeti_eyes"] = eyes
+	o["yeti_arm"] = arms[1]
+	o["yeti_head"] = head
+	o["zzz"] = zzz
+	o["snore"] = 0.0
+	animated.append(func(tt):
+		if not o.awake:
+			var br := sin(tt * 1.6)
+			var k: float = 1.0 + o.snore
+			y.scale = Vector3(1.0 - br * 0.015 * k, 1.0 + br * 0.035 * k, 1.0 + br * 0.02 * k)
+			head.rotation.z = 0.12 + br * 0.04
+			zzz.position.y = 2.35 + fmod(tt * 0.35, 0.5)
+			zzz.modulate.a = 1.0 - fmod(tt * 0.35, 0.5) * 1.6
+			o.snore = max(0.0, o.snore - 0.02)
+		else:
+			arms[1].rotation.z = 2.5 + sin(tt * 7.0) * 0.35
+			head.rotation.z = sin(tt * 3.5) * 0.08)
+
+
+## Az akadály helyi koordinátája (x: menetirány, z: kifelé) világkoordinátában.
+func gate_point(id: int, local: Vector3) -> Vector3:
+	return (gates[id].root as Node3D).transform * local
+
+
+func cannon_perch(id: int) -> Vector3:
+	var o: Dictionary = gates[id]
+	return (o.root as Node3D).transform * ((o.cannon as Node3D).transform * Vector3(0.08, 0.6, 0))
+
+
+func yeti_head(id: int) -> Vector3:
+	return gate_point(id, Vector3(-0.3, 1.45, 0.1))
+
+
 func _set_gate_open(id: int) -> void:
 	var o: Dictionary = gates[id]
-	o.door.visible = false
-	o.label.text = "🔓"
-	o.label.modulate = Color("#8ce99a")
-	o.label.font_size = 80
+	o.open = true
+	o.label.visible = false
+	for b in o.bricks:
+		if is_instance_valid(b):
+			b.queue_free()
+	o.bricks = []
+	for e in o.extra:
+		if is_instance_valid(e):
+			e.queue_free()
+	o.extra = []
+	if o.kind == "yeti":
+		o.awake = true
+		o.zzz.visible = false
+		for e in o.yeti_eyes:
+			e.scale.y = 1.0
+		var y: Node3D = o.yeti
+		y.scale = Vector3.ONE * 0.8
+		y.position = Vector3(0.2, 0.08, 1.85)
+		y.rotation.y = -0.64
 
 
-func open_gate(id: int) -> void:
+## Sikertelen próbálkozás: az akadály megrezzen, de áll tovább.
+func gate_fail(id: int) -> void:
 	if not gates.has(id):
 		return
 	var o: Dictionary = gates[id]
-	var door: Node3D = o.door
+	var root: Node3D = o.root
+	if o.kind == "yeti":
+		o.snore = 2.5
+		var z: Label3D = o.zzz
+		var tw := create_tween()
+		tw.tween_property(z, "scale", Vector3.ONE * 1.8, 0.15)
+		tw.tween_property(z, "scale", Vector3.ONE, 0.5)
+		return
 	var tw := create_tween()
-	tw.tween_property(door, "position:y", 0.25, 0.12)
-	tw.tween_property(door, "position:y", 2.6, 0.9).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(door, "scale", Vector3(1, 0.05, 1), 0.9).set_ease(Tween.EASE_IN)
-	tw.tween_callback(func(): _set_gate_open(id))
-	shake = 0.9
+	for a in [0.05, -0.04, 0.025, -0.012, 0.0]:
+		tw.tween_property(root, "rotation:z", a, 0.07)
+	shake = 0.35
+
+
+## A fal darabjaira hullik: a téglák a menetirányba és a szakadék felé repülnek.
+func break_wall(id: int, power := 1.0) -> void:
+	if not gates.has(id):
+		return
+	var o: Dictionary = gates[id]
+	for b in o.bricks:
+		debris.append({"n": b, "age": FX.f() * 0.3,
+			"v": Vector3(FX.fr(1.5, 5.5) * power, FX.fr(1.0, 5.5) * power, FX.fr(-1.0, 3.2)),
+			"w": Vector3(FX.fr(-9, 9), FX.fr(-9, 9), FX.fr(-9, 9))})
+	o.bricks = []
+	_set_gate_open(id)
+	# porfelhő
+	for i in 7:
+		_puff(gate_point(id, Vector3(FX.fr(-0.2, 0.5), FX.fr(0.3, 1.6), FX.fr(-0.7, 0.8))), "#d9cfc1", 0.5 + FX.f() * 0.4, 0.7)
+	shake = 0.9 * power
+
+
+func _puff(at: Vector3, col: String, size: float, dur: float) -> void:
+	var m := smat(col, {"rough": 1.0}).duplicate() as StandardMaterial3D
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var s := Chars3D.lsphere(self, 1.0, m, at.x, at.y, at.z, 1, 1, 1, 6, 4)
+	s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	s.scale = Vector3.ONE * size * 0.2
+	var tw := create_tween()
+	tw.tween_property(s, "scale", Vector3.ONE * size, dur * 0.35).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(s, "position:y", at.y + 0.5, dur)
+	tw.parallel().tween_property(m, "albedo_color:a", 0.0, dur).set_ease(Tween.EASE_IN)
+	tw.tween_callback(s.queue_free)
+
+
+func cannon_light(id: int) -> void:
+	var o: Dictionary = gates[id]
+	o.lit = true
+	o.spark.visible = true
+	var cn: Node3D = o.cannon
+	var tw := create_tween()
+	tw.tween_property(cn, "scale", Vector3(1.12, 0.8, 1.12), 0.08)
+	tw.tween_property(cn, "scale", Vector3.ONE, 0.3).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+
+
+## Elsül az ágyú: a golyó a bástyába csapódik, ami darabokra hullik.
+func cannon_fire(id: int) -> void:
+	var o: Dictionary = gates[id]
+	o.lit = false
+	o.spark.visible = false
+	var barrel: Node3D = o.barrel
+	var flash: MeshInstance3D = o.flash
+	var tw := create_tween()
+	tw.tween_property(barrel, "position:x", -0.3, 0.06)
+	tw.tween_property(barrel, "position:x", 0.0, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	flash.visible = true
+	flash.scale = Vector3.ONE * 0.1
+	var tf := create_tween()
+	tf.tween_property(flash, "scale", Vector3.ONE * 0.42, 0.07)
+	tf.tween_property(flash, "scale", Vector3.ONE * 0.01, 0.12)
+	tf.tween_callback(func(): flash.visible = false)
+	var from: Vector3 = (o.root as Node3D).transform * ((o.cannon as Node3D).transform * (barrel.transform * Vector3(0.75, 0, 0)))
+	var to := gate_point(id, Vector3(-0.2, 1.0, 0.1))
+	for i in 5:
+		_puff(from + Vector3(FX.fr(-0.25, 0.25), FX.fr(-0.1, 0.3), FX.fr(-0.25, 0.25)), "#6b7280", 0.45 + FX.f() * 0.35, 0.9)
+	var ball := Chars3D.lsphere(self, 0.17, smat("#1f2329", {"metal": 0.5, "rough": 0.4}), from.x, from.y, from.z, 1, 1, 1, 7, 4)
+	var tb := create_tween()
+	tb.tween_property(ball, "position", to, 0.16)
+	tb.tween_callback(func():
+		ball.queue_free()
+		break_wall(id, 1.5))
+	shake = 0.7
+
+
+## Ívben repülő golyó (hógolyó) a és b között.
+func throw_ball(a: Vector3, b: Vector3, dur: float, height: float, col := "#ffffff", r := 0.16) -> void:
+	var ball := Chars3D.lsphere(self, r, smat(col, {"rough": 0.9}), a.x, a.y, a.z, 1, 1, 1, 6, 4)
+	var tw := create_tween()
+	tw.tween_method(func(k: float):
+		ball.position = a.lerp(b, k) + Vector3(0, sin(k * PI) * height, 0)
+		ball.rotation.x = k * 9.0, 0.0, 1.0, dur)
+	tw.tween_callback(func():
+		for i in 6:
+			_puff(b + Vector3(FX.fr(-0.3, 0.3), FX.fr(-0.2, 0.3), FX.fr(-0.3, 0.3)), "#ffffff", 0.3 + FX.f() * 0.25, 0.6)
+		ball.queue_free())
+
+
+## A jeti felriad, nagyot ugrik, és kiül a jégpárkányra integetni.
+func yeti_wake(id: int) -> void:
+	var o: Dictionary = gates[id]
+	var y: Node3D = o.yeti
+	o.label.visible = false
+	o.zzz.text = "❗"
+	o.zzz.modulate.a = 1.0
+	for e in o.yeti_eyes:
+		e.scale.y = 1.25
+	o.awake = true
+	o.open = true
+	y.scale = Vector3.ONE
+	var from := y.position
+	var to := Vector3(0.2, 0.08, 1.85)
+	var tw := create_tween()
+	tw.tween_property(y, "scale", Vector3(1.12, 0.8, 1.12), 0.1)
+	tw.tween_property(y, "scale", Vector3(0.9, 1.15, 0.9), 0.1)
+	tw.parallel().tween_property(y, "position:y", 0.9, 0.22).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.tween_property(y, "position:y", 0.0, 0.2).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	tw.tween_callback(func(): shake = 0.8)
+	tw.tween_property(y, "scale", Vector3(1.15, 0.8, 1.15), 0.08)
+	tw.tween_property(y, "scale", Vector3.ONE, 0.12)
+	tw.tween_interval(0.15)
+	tw.tween_method(func(k: float):
+		y.position = from.lerp(to, k) + Vector3(0, sin(k * PI) * 1.6, 0)
+		y.rotation.y = lerpf(-PI / 2, -0.64, k)
+		y.scale = Vector3.ONE * lerpf(1.0, 0.8, k), 0.0, 1.0, 0.6)
+	tw.tween_callback(func():
+		shake = 0.6
+		o.zzz.visible = false
+		for e in o.yeti_eyes:
+			e.scale.y = 1.0)
+
+
+func _update_debris(dt: float) -> void:
+	if debris.is_empty():
+		return
+	var keep: Array = []
+	for d in debris:
+		var n: Node3D = d.n
+		if not is_instance_valid(n):
+			continue
+		d.age += dt
+		d.v.y -= 16.0 * dt
+		n.position += d.v * dt
+		n.rotation += d.w * dt
+		if d.age > 1.9:
+			n.scale = Vector3.ONE * max(0.01, 1.0 - (d.age - 1.9) * 3.0)
+		if d.age > 2.2:
+			n.queue_free()
+		else:
+			keep.append(d)
+	debris = keep
+
+
+# ------------------------------------------------------------------ mezők látványa: üldözők és szél
+## kind: "bear" (medve), "rocks" (kőomlás), "snow" (lavina). A csomópont +z iránya a haladás (lefelé az úton).
+func make_chaser(kind: String) -> Node3D:
+	var g := Node3D.new()
+	add_child(g)
+	g.set_meta("kind", kind)
+	if kind == "bear":
+		var m := Chars3D.build("bear")
+		m.scale = Vector3.ONE * 1.75
+		for s in [-1, 1]:
+			Chars3D.box(m.rig, 0.13, 0.04, 0.05, Chars3D.mat("#2a170b"), Vector3(s * 0.12, 0.925, 0.275), Vector3(0.3, 0, s * 0.55))
+		for s in [-1, 1]:
+			Chars3D.lcone(m.rig, 0.025, 0.07, Chars3D.mat("#ffffff"), s * 0.05, 0.69, 0.33, 4, Vector3(PI, 0, 0))
+		g.add_child(m)
+		g.set_meta("model", m)
+		return g
+	var snow := kind == "snow"
+	var cols := ["#f4f7fb", "#ffffff", "#dfeaf5"] if snow else ["#8a8580", "#6f6a66", "#9b968f"]
+	var defs := [[0.0, 0.52, 0.0], [-0.42, 0.36, -0.5], [0.4, 0.4, -0.75], [0.05, 0.3, -1.25], [-0.3, 0.26, 0.6]]
+	if snow:
+		defs.append_array([[0.45, 0.34, 0.35], [-0.5, 0.3, -1.3], [0.2, 0.45, -1.9]])
+	for i in defs.size():
+		var d: Array = defs[i]
+		var hold := Chars3D.grp(g, Vector3(d[0], d[1] * (0.85 if snow else 1.0), d[2]))
+		var b := Chars3D.lsphere(hold, d[1], smat(cols[i % 3], {"rough": 1.0}), 0, 0, 0, 1, 0.9 if snow else 0.85, 1, 6 + (i % 2), 4)
+		b.set_meta("r", d[1])
+	return g
+
+
+## Az üldöző elhelyezése az út s pontjára; moved: mennyit haladt (mezőben) az előző képkocka óta.
+func place_chaser(g: Node3D, s: float, moved: float) -> void:
+	g.position = ML.pos(clamp(s, 0.0, float(ML.GOAL)))
+	g.rotation.y = ML.angle(s) - PI / 2
+	if g.get_meta("kind") == "bear":
+		var m: Node3D = g.get_meta("model")
+		var run: float = clamp(abs(moved) * 60.0, 0.0, 1.0)
+		m.position.y = abs(sin(t * 13.0)) * 0.22 * run
+		m.rotation.x = 0.22 * run + sin(t * 13.0) * 0.06 * run
+		m.rotation.z = sin(t * 6.5) * 0.12 * run
+		return
+	for hold in g.get_children():
+		var b: Node3D = hold.get_child(0)
+		b.rotation.x += moved * ML.SPACING / float(b.get_meta("r"))
+		hold.position.y = float(b.get_meta("r")) * 0.9 + abs(sin(t * 9.0 + hold.position.z * 3.0)) * 0.12
+
+
+func chaser_scale(g: Node3D, to: float, dur: float) -> void:
+	var tw := create_tween()
+	tw.tween_property(g, "scale", Vector3.ONE * to, dur).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT if to > 0.5 else Tween.EASE_IN)
+
+
+func _build_wind() -> void:
+	wind = Node3D.new()
+	wind.visible = false
+	add_child(wind)
+	var wm := smat("#ffffff", {"unshaded": true, "alpha": 0.9})
+	var leaf := [smat("#8ce99a", {"unshaded": true}), smat("#ffd43b", {"unshaded": true}), smat("#ffffff", {"unshaded": true})]
+	var items: Array = []
+	for i in 18:
+		var b := Chars3D.box(wind, 1.0 + (i % 3) * 0.45, 0.1, 0.1, wm, Vector3.ZERO)
+		b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		items.append({"n": b, "ph": i * 0.377, "y": 0.25 + (i * 0.37) - floor(i * 0.37 / 1.5) * 1.5, "z": -0.7 + fmod(i * 0.53, 1.5), "leaf": false, "sp": 1.5 + (i % 4) * 0.25})
+	for i in 9:
+		var b := Chars3D.box(wind, 0.2, 0.02, 0.13, leaf[i % 3], Vector3.ZERO)
+		b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		items.append({"n": b, "ph": i * 0.291, "y": 0.3 + fmod(i * 0.41, 1.3), "z": -0.65 + fmod(i * 0.67, 1.4), "leaf": true, "sp": 1.2 + (i % 3) * 0.2})
+	animated.append(func(tt):
+		if not wind.visible:
+			return
+		for it in items:
+			var k := fmod(tt * it.sp + it.ph, 1.0)
+			var n: Node3D = it.n
+			var grow := sin(k * PI)
+			if it.leaf:
+				n.position = Vector3(lerpf(-2.4, 2.2, k), it.y + sin(k * 9.0 + it.ph * 20.0) * 0.25, it.z + cos(k * 7.0 + it.ph * 9.0) * 0.2)
+				n.rotation = Vector3(tt * 9.0 + it.ph, tt * 7.0, tt * 5.0)
+				n.scale = Vector3.ONE * grow * wind_power
+			else:
+				n.position = Vector3(lerpf(-2.6, 2.0, k), it.y + sin(k * PI) * 0.12, it.z)
+				n.scale = Vector3(grow, 1, 1) * max(0.01, wind_power))
+
+
+## A szél-effekt a megadott talppontra (s: útmenti hely) kerül; on = false kikapcsolja.
+func wind_at(pos: Vector3, s: float, on := true) -> void:
+	if wind == null:
+		_build_wind()
+	wind.visible = on
+	if on:
+		wind.position = pos
+		wind.rotation.y = ML.angle(s)
+		wind_power = min(1.0, wind_power + 0.06)
+	else:
+		wind_power = 0.0
 
 
 func _summit() -> void:
@@ -640,6 +1061,7 @@ func render(st: Dictionary, dt: float) -> void:
 			pawns[pid].group.queue_free()
 			pawns.erase(pid)
 	_update_camera(dt)
+	_update_debris(dt)
 	marker.visible = cur_pos != null
 	if cur_pos != null:
 		marker.position = cur_pos + Vector3(0, 1.9 + sin(t * 5.0) * 0.1, 0)
@@ -716,7 +1138,7 @@ func _cam_target() -> Array:
 	var pr := Vector2(p.x, p.z).length()
 	var ang: float = atan2(p.x, p.z) if pr > 0.6 else cam_ang
 	# kicsit előre néz a menetirányba, hogy látszódjon, mi jön
-	return [ang + 0.16, pr + z.d, p.y + z.h, Vector3(p.x, p.y + 0.6, p.z)]
+	return [ang + cam_side, pr + z.d, p.y + z.h, Vector3(p.x, p.y + 0.6, p.z)]
 
 
 func cam_snap() -> void:
@@ -738,7 +1160,7 @@ func _update_camera(dt: float) -> void:
 		cam_y = lerpf(cam_y, d[2], k)
 		cam_look_pos = cam_look_pos.lerp(d[3], k)
 	shake = max(0.0, shake - dt * 2.5)
-	var off := Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * shake * 0.25
+	var off := Vector3(FX.fr(-1, 1), FX.fr(-1, 1), 0) * shake * 0.25
 	camera.position = Vector3(sin(cam_ang) * cam_rad, cam_y, cos(cam_ang) * cam_rad) + off
 	camera.look_at(cam_look_pos + off, Vector3.UP)
 

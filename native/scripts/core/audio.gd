@@ -7,6 +7,7 @@ var _music_a: AudioStreamPlayer
 var _music_b: AudioStreamPlayer
 var _music_name := ""
 var muted := false
+var quiet := false      # online felzárkózás közben nem szólnak az effektek
 var _noise := PackedFloat32Array()
 
 
@@ -68,7 +69,7 @@ func music(name: String, fade := 0.8) -> void:
 func jingle(name: String) -> void:
 	## rövid, nem ismétlődő zenei betét (a háttérzene halkul alatta)
 	var path := "res://music/%s.wav" % name
-	if not ResourceLoader.exists(path):
+	if quiet or not ResourceLoader.exists(path):
 		return
 	var p := AudioStreamPlayer.new()
 	p.bus = "Music"
@@ -87,7 +88,7 @@ func jingle(name: String) -> void:
 # ------------------------------------------------------------------ effektek
 func play(name: String, pitch := 1.0) -> void:
 	var p: AudioStreamPlayer = _players.get(name)
-	if p == null:
+	if p == null or quiet:
 		return
 	p.pitch_scale = pitch
 	p.play()

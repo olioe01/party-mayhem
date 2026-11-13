@@ -61,7 +61,11 @@ func _make_dice_block() -> void:
 	m.emission_enabled = true
 	m.emission = Color("#b197fc")
 	m.emission_energy_multiplier = 0.25
+	# a kocka mindig előtérben van: semmi nem takarhatja ki
+	m.no_depth_test = true
+	m.render_priority = 20
 	cube.material_override = m
+	cube.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	dice_block.add_child(cube)
 	for i in 6:
 		var face := Label3D.new()
@@ -71,6 +75,9 @@ func _make_dice_block() -> void:
 		face.pixel_size = 0.004
 		face.modulate = Color("#5b3fb5")
 		face.outline_size = 0
+		face.no_depth_test = true
+		face.double_sided = false
+		face.render_priority = 21
 		var dirs := [Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, -1, 0)]
 		var dv: Vector3 = dirs[i]
 		face.position = dv * 0.41
@@ -86,6 +93,8 @@ func _make_dice_block() -> void:
 	dice_label.pixel_size = 0.006
 	dice_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	dice_label.no_depth_test = true
+	dice_label.render_priority = 22
+	dice_label.outline_render_priority = 21
 	dice_label.outline_size = 28
 	dice_label.outline_modulate = D.DARK
 	dice_label.modulate = Color("#ffd43b")

@@ -267,5 +267,5 @@ func draw(c: CanvasItem) -> void:
 	button(c, 975, 645, 90, 46, "− Bot", remove_bot, {"color": Color("#868e96"), "size": 20})
 	var can := not G.players.is_empty()
 	button(c, 1080, 640, 160, 56, "INDÍTÁS", go, {"color": Color("#51cf66") if can else Color("#555555"), "size": 26})
-	D.text(c, "A ⭐ VIP a telefonjáról is indíthat, ha mindenki kész. Itt: ENTER = indítás", 50, 668, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false, "maxw": 400})
-	D.text(c, "B = bot · J = játékmód · F = teljes képernyő · M = hang · P = FPS", 50, 690, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false})
+	D.text(c, "A ⭐ VIP a telefonjáról is indíthat, ha mindenki kész. Itt: ENTER = indítás", 50, 680, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false, "maxw": 400})
+	D.text(c, "B = bot · J = játékmód · F = teljes képernyő · M = hang · P = FPS · O = online", 50, 700, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false})

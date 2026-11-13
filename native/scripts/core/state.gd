@@ -18,6 +18,12 @@ const CHARS := [
 	{"id": "queen", "name": "Királynő", "emoji": "👸", "die": "Királyi kocka", "faces": [[0, -2], [3, 0], [4, 0], [5, 0], [6, 0], [0, 8]], "tip": "3–6, vagy 8 🪙 (vagy −2 🪙)"},
 	{"id": "thimble", "name": "Gyűszű", "emoji": "🔘", "die": "Varrókocka", "faces": [[2, 0], [2, 0], [2, 0], [3, 0], [3, 0], [13, 0]], "tip": "2–3, ritkán 13!"},
 	{"id": "donut", "name": "Fánk", "emoji": "🍩", "die": "Cukorkocka", "faces": [[1, 2], [2, 2], [5, 0], [5, 0], [5, 0], [8, 0]], "tip": "1–2 + 2 🪙, sok 5-ös"},
+	{"id": "knight", "name": "Lovag", "emoji": "⚔️", "die": "Pajzskocka", "faces": [[3, 1], [4, 0], [5, 0], [6, 0], [6, 0], [7, 0]], "tip": "3–7, megbízható"},
+	{"id": "king", "name": "Király", "emoji": "🤴", "die": "Kincstárkocka", "faces": [[1, 4], [2, 4], [3, 0], [5, 0], [7, 0], [9, 0]], "tip": "kis dobás mellé 4 🪙"},
+	{"id": "tiger", "name": "Tigris", "emoji": "🐯", "die": "Vadászkocka", "faces": [[3, 0], [3, 0], [6, 0], [6, 0], [9, 0], [9, 0]], "tip": "3 · 6 · 9 – nagy ugrások"},
+	{"id": "bear", "name": "Medve", "emoji": "🐻", "die": "Mézkocka", "faces": [[2, 2], [2, 2], [4, 1], [6, 0], [8, 0], [8, 0]], "tip": "lassan mézet (🪙) gyűjt, vagy 6–8"},
+	{"id": "dwarf", "name": "Törpe", "emoji": "⛏️", "die": "Bányászkocka", "faces": [[1, 6], [2, 3], [3, 0], [4, 0], [5, 0], [6, 0]], "tip": "kis lépések, de aranyat ás"},
+	{"id": "ship", "name": "Hajó", "emoji": "⛵", "die": "Vitorlakocka", "faces": [[0, 3], [2, 0], [4, 0], [6, 0], [8, 0], [10, 0]], "tip": "páros lépések, szélcsendben 3 🪙"},
 ]
 
 const MAX_PLAYERS := 8

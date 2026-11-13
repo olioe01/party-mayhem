@@ -4,6 +4,11 @@ extends Node
 ##   host -> telefon: {e:"ctrl", d:{kind:"layout"|"status"|"vibrate", ...}}
 ##   telefon -> host: {e:"player:join", d:{pid,name}}, {e:"player:input", d:{t:..., lid:...}}
 ## Itt élnek a botok és a "kérdezz és várj a válaszra" (ask) logika is.
+##
+## Online játék: ugyanezen a WebSocket-porton jelentkeznek a vendég gépek is (pc:hello).
+## A telefonok bemenete nem közvetlenül hat a játékra, hanem a Sync eseménysorán megy át,
+## hogy minden gépen ugyanabban a lépésben érvényesüljön. A botok időzítői is játéklépésben
+## számolnak (Sync.after), nem valós időben.
 
 signal player_joined(pid: String, pname: String, is_bot: bool)
 signal player_left(pid: String)
@@ -34,6 +39,7 @@ var bots := {}                     # pid -> true
 var away := {}                     # lecsatlakozott játékosok (bot vezérli őket)
 var _seq := 0
 var _asks: Array = []
+var quiet := false                 # felzárkózás közben nem küldünk a telefonoknak
 
 
 class Ask:
@@ -199,9 +205,10 @@ func _poll_ws() -> void:
 		tcp.set_no_delay(true)
 		var ws := WebSocketPeer.new()
 		ws.inbound_buffer_size = 65536
-		ws.outbound_buffer_size = 262144
+		ws.outbound_buffer_size = 4 << 20     # egy vendég gép kezdőállapota nagyobb csomag
+		ws.max_queued_packets = 8192
 		if ws.accept_stream(tcp) == OK:
-			_ws_conns.append({"ws": ws, "pid": "", "t": Time.get_ticks_msec()})
+			_ws_conns.append({"ws": ws, "pid": "", "name": "", "pc": false, "t": Time.get_ticks_msec()})
 	for c in _ws_conns.duplicate():
 		var ws: WebSocketPeer = c.ws
 		ws.poll()
@@ -212,12 +219,14 @@ func _poll_ws() -> void:
 				_on_ws_message(c, txt)
 		elif st == WebSocketPeer.STATE_CLOSED:
 			_ws_conns.erase(c)
-			if c.pid != "" and is_same(_pid_conn.get(c.pid), c):
+			if c.pc:
+				Sync.pc_closed(c)
+			elif c.pid != "" and is_same(_pid_conn.get(c.pid), c):
 				_pid_conn.erase(c.pid)
-				player_left.emit(c.pid)
+				Sync.submit({"k": "leave", "pid": c.pid})
 
 
-func _clean(v, max_len: int) -> String:
+func clean(v, max_len: int) -> String:
 	var s := str(v if v != null else "")
 	var out := ""
 	for ch in s:
@@ -235,8 +244,10 @@ func _on_ws_message(c: Dictionary, txt: String) -> void:
 	if typeof(d) != TYPE_DICTIONARY:
 		d = {}
 	if e == "player:join":
-		var pid := _clean(d.get("pid"), 40)
-		var pname := _clean(d.get("name"), 14)
+		if c.pc:
+			return
+		var pid := clean(d.get("pid"), 40)
+		var pname := clean(d.get("name"), 14)
 		if pname == "": pname = "Játékos"
 		if pid == "": return
 		var old = _pid_conn.get(pid)
@@ -244,14 +255,19 @@ func _on_ws_message(c: Dictionary, txt: String) -> void:
 			old.pid = ""
 			(old.ws as WebSocketPeer).close()
 		c.pid = pid
+		c.name = pname
 		_pid_conn[pid] = c
 		_raw_send(c, "host:online", {})
-		away.erase(pid)
-		player_joined.emit(pid, pname, false)
+		Sync.submit({"k": "join", "pid": pid, "name": pname})
 	elif e == "player:input":
-		if c.pid == "":
+		if c.pid == "" or c.pc:
 			return
-		handle_input(c.pid, d)
+		Sync.submit({"k": "in", "pid": c.pid, "m": d})
+	elif e == "pc:hello":
+		if c.pid == "" and not c.pc:
+			Sync.pc_hello(c, d)
+	elif e == "pc:ev":
+		Sync.pc_event(c, d)
 
 
 func _raw_send(c: Dictionary, e: String, d) -> void:
@@ -261,7 +277,7 @@ func _raw_send(c: Dictionary, e: String, d) -> void:
 
 
 func send(pid: String, msg: Dictionary) -> void:
-	if bots.has(pid):
+	if bots.has(pid) or quiet:
 		return
 	var c = _pid_conn.get(pid)
 	if c:
@@ -270,6 +286,20 @@ func send(pid: String, msg: Dictionary) -> void:
 
 func phone_count() -> int:
 	return _pid_conn.size()
+
+
+## Az ehhez a géphez csatlakozott telefonok: [{pid, name}]
+func local_phones() -> Array:
+	var out: Array = []
+	for pid in _pid_conn:
+		out.append({"pid": pid, "name": _pid_conn[pid].name})
+	return out
+
+
+## Felzárkózás után minden helyi telefon megkapja az aktuális elrendezését.
+func resend_all() -> void:
+	for pid in _pid_conn:
+		resend_layout(pid)
 
 
 # ------------------------------------------------------------------ kontroller-vezérlés
@@ -331,7 +361,7 @@ func ask(pid: String, layout: Dictionary, types: Array = ["choice", "tap", "num"
 	a.types = types
 	_asks.append(a)
 	a.lid = set_ctrl(pid, layout)
-	get_tree().create_timer(timeout_sec, true).timeout.connect(func():
+	Sync.after(timeout_sec, func():
 		if not a.finished: _bot_react(pid, layout, true))
 	var msg: Dictionary = await a.done
 	return msg
@@ -361,7 +391,7 @@ func mark_away(pid: String) -> void:
 
 
 func _later(sec: float, f: Callable) -> void:
-	get_tree().create_timer(max(0.0, sec), true).timeout.connect(f)
+	Sync.after(max(0.0, sec), f)
 
 
 func _bot_react(pid: String, l: Dictionary, now := false) -> void:

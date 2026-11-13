@@ -3,3 +3,4 @@ build/
 web.zip
 music/*.wav
 *.tmp
+build_id.txt

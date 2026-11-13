@@ -16,11 +16,28 @@ Ez a Party Mayhem önálló, telepítés nélkül futtatható változata, Godot 
 | `J` | játékmód váltása (lobby) |
 | `←` `→` | körök száma (lobby) |
 | `ENTER` | indítás / tovább |
+| `O` | online játék (szoba nyitása / csatlakozás) |
 | `P` | FPS kijelzés |
 | `F12` | képernyőkép (a Godot felhasználói mappájába) |
 | `Esc` kétszer | kilépés |
 
 Ha a QR-kód rossz címet mutat (például több hálózati kártya miatt), indítsd így: `set PUBLIC_HOST=192.168.1.23 && PartyMayhem.exe`, ahol az IP-cím a gép Wi-Fi címe (`ipconfig`). Alapból a 3000-es (telefonos oldal) és a 3001-es (WebSocket) portot használja; ha ezek foglaltak, a következő szabadra lép (3010/3011, …).
+
+## 🌐 Online játék – mindenki a saját gépén
+
+Ha a barátaidnak is megvan a `PartyMayhem.exe`, nem kell képernyőt megosztani: mindenki a saját gépén futtatja és látja a játékot, a gépek között csak a gombnyomások utaznak, ezért nincs videókésés.
+
+1. **A szoba gazdája** a lobbyban megnyomja a **🌐 Online játék** gombot (vagy az `O` billentyűt), majd a **Szoba megnyitása az interneten** gombot. A játék megkéri a routert, hogy engedje be a többieket (UPnP), és kiír egy rövid **szobakódot** (pl. `ABC-DEFG`).
+2. **A többiek** ugyanitt beírják a kódot a jobb oldali mezőbe, és **Csatlakozás**. Pár másodperc múlva ugyanazt a lobbyt látják.
+3. **A telefonját mindenki a saját képernyőjén lévő QR-kóddal** csatlakoztatja (a saját Wi-Fi-jén). A játékot bármelyik gépről el lehet indítani (ENTER vagy az INDÍTÁS gomb), illetve a ⭐ VIP telefonjáról.
+
+Tudnivalók:
+- Menet közben is be lehet szállni, illetve vissza lehet jönni: a játék pár másodperc alatt felzárkózik. Aki játék közben érkezik új telefonnal, az a következő játékban kap helyet.
+- Ha megszakad a kapcsolat, a vendég gép magától újrapróbálkozik; ha nem sikerül, visszakerül a saját lobbyjába. A lecsatlakozott gép játékosai helyett addig a bot játszik.
+- Mindenkinek **ugyanaz a játékverzió** kell (eltérő verziónál a csatlakozás hibaüzenettel elutasítja).
+- **Ha a router nem engedi az automatikus portnyitást** (a panel ezt kiírja): vagy irányítsd a routeren a 3001-es TCP portot a szoba gazdájának gépére, vagy használjatok ingyenes VPN-t (Radmin VPN, Tailscale, Hamachi), és a kód helyett a gazda VPN-ben látott IP-címét írjátok be. Egy hálózaton belül elég a gép helyi IP-címe.
+- A Windows tűzfal első indításkor rákérdez: a szoba gazdájánál engedélyezni kell – azt a hálózattípust pipáld be, amelyikre a géped csatlakozik (ha bizonytalan vagy, mindkettőt).
+- Parancssorból: `PartyMayhem.exe -- --join=ABC-DEFG` (vagy `--join=192.168.1.23`) azonnal csatlakozik, a `-- --room` indításkor megnyitja a szobát.
 
 ## Két nagy játékmód
 
@@ -34,8 +51,9 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 - Ebben a módban nincsenek saját figurakockák, és a minijátékok mindig egyéniek (nincs csapat).
 - 🟥 **Büntetőmezők:** vissza 2–6 mezőt (lent medve, középen kőomlás, fent lavina – a hegy felfelé egyre keményebb).
 - ❄️ **Jégmező:** kimaradsz a következő dobásodból. 🟩 **Hátszél:** előre 2–3 mezőt.
-- 🚧 **3 kapu** (5+, 6+, 8+): a kapu mezőjén mindenkinek meg kell állnia, és addig senki nem mehet tovább, amíg valaki a kapu mezőjén állva legalább a ráírt számot nem dobja. Utána a kapu mindenkinek nyitva marad.
-- A különleges mezők és a kapuk pontos helye játékonként kicsit más.
+- 🚧 **3 akadály**: téglafal (be kell ütni), bástya (az ágyúval kell szétlőni) és egy alvó jeti (hógolyóval kell felébreszteni). Mindegyiknél külön akadály-kockával dobsz, és 4, 5 vagy 6 kell. Aki lépés közben ér oda, azonnal dobhat, és ha sikerül, a maradék lépéseivel megy is tovább; aki nem dobja meg, a következő körében újra próbálkozhat. A legyőzött akadály mindenkinek szabad utat ad.
+- A piros mezőkön tényleg megkerget a medve (feljebb kőomlás, majd lavina sodor vissza), a zöldeken a hátszél tol előre.
+- A különleges mezők és az akadályok pontos helye játékonként kicsit más.
 
 ## Mi van benne (Koronavadászat)
 
@@ -98,13 +116,23 @@ godot --headless --path . --export-release "Windows Desktop" build/PartyMayhem.e
 
 Az exe-exporthoz kell a Windows export sablon (`~/.local/share/godot/export_templates/4.4.1.stable/windows_release_x86_64.exe`). A szerkesztőben: *Editor → Manage Export Templates*.
 
+**Hogyan marad szinkronban a több gép?** A játék fix 60 lépés/mp ütemben fut (`Main.step`). A hoszt minden bemenetet lépésszámmal megjelölve szétküld, a vendég gépek ugyanazokat a lépéseket játsszák le. Minden jelenetváltásnál a hoszt a teljes állapotot is átküldi (`Snapshot`), és minden gép – a hoszt is – ebből folytatja. Amire új kódnál figyelni kell:
+- a játékmenetre ható időzítés a jelenet `after()` / `sleep()` időzítőivel vagy a `Sync.after()`-rel menjen, ne `create_timer`-rel és ne valós idővel;
+- a csak látványt szolgáló véletlen (részecske, pislogás, rázkódás) az `FX.f()` / `FX.fr()` legyen, ne a közös `randf()`;
+- a `draw()` ne változtasson állapotot és ne húzzon véletlent;
+- egy jelenet konstruktorának minden paramétere legyen elhagyható, a tagváltozói pedig sima adatok (a `Snapshot` ezeket viszi át).
+
+Ellenőrzés két példánnyal egy gépen: az egyik `-- --bots=4 --autostart --speed=10 --sync-log`, a másik `-- --join=127.0.0.1:3001 --sync-log`; a vendég minden jelenetváltásnál kiírja, hogy a saját állapota bájtra egyezik-e a hosztéval (`EGYEZIK` / `ELTÉR`).
+
 Tesztelési kapcsolók (a `--` után): `--bots=4`, `--autostart`, `--rounds=2`, `--mode=mountain` (hegymászás), `--mg=beam` (adott minijáték), `--speed=2`, `--small` (kis ablak), `--shots=mappa` (automatikus képernyőképek), `--quit-at=60`.
 
 ```
 native/
   main.tscn, scripts/main.gd     jelenetváltás, 2D réteg, részecskék, billentyűk
   scripts/core/                  net (web- és WebSocket-szerver, botok), state, game, audio, qr, draw
-  scripts/world/                 board_layout (pálya), board3d (3D tábla, kamera), chars3d (12 figura),
+                                 sync (online játék: lépésütem, eseményfolyam, szobakód, UPnP),
+                                 snapshot (állapotmentés jelenetváltáskor), online_ui (a lobby online panelje)
+  scripts/world/                 board_layout (pálya), board3d (3D tábla, kamera), chars3d (18 figura),
                                  mountain_layout + mountain3d (a hegymászás pályája és 3D hegye)
   scripts/scenes/                lobby, board (táblamenet), mountain (hegymászás), mg_flow (minijáték-keret), final
   scripts/minigames/             a 23 minijáték

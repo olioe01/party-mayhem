@@ -3,7 +3,7 @@ class_name MountainLayout
 ## Tiszta adat + geometria (a 3D megjelenítés a Mountain3D-ben van).
 ##
 ## Mezők: T rajt · N sima · P büntető (vissza N mezőt) · F hátszél (előre N mezőt)
-##        X jég (kimaradsz egy dobásból) · G kapu (csak adott dobással nyílik) · W csúcs (cél)
+##        X jég (kimaradsz egy dobásból) · G akadály (külön kockával 4-5-6 kell) · W csúcs (cél)
 
 const GOAL := 80             # a csúcs mező sorszáma (a rajt a 0.), vagyis 80 lépés az út
 const SPIRAL_N := 80         # a 0..79. mező van a spirálon, a 80. a csúcs közepe
@@ -16,7 +16,8 @@ const WALL_IN := 0.75        # a hegy fala ennyivel van beljebb az út közepén
 const SUMMIT_Y := H + 0.45
 
 const GATE_NODES := [20, 42, 62]
-const GATE_NEEDS := [5, 6, 8]
+const GATE_KINDS := ["wall", "cannon", "yeti"]   # téglafal · ágyús bástya · alvó jeti
+const GATE_PASS := 4         # az akadály-kockán legalább ennyi kell (4-5-6)
 
 static var _theta: PackedFloat32Array = PackedFloat32Array()
 
@@ -86,8 +87,8 @@ static func build() -> Dictionary:
 	for k in GATE_NODES.size():
 		var id: int = GATE_NODES[k] + randi_range(-2, 2)
 		nodes[id].type = "G"
-		nodes[id].val = GATE_NEEDS[k]
-		gates.append({"node": id, "need": GATE_NEEDS[k], "open": false, "idx": k})
+		nodes[id].val = GATE_PASS
+		gates.append({"node": id, "kind": GATE_KINDS[k], "need": GATE_PASS, "open": false, "idx": k})
 	# különleges mezők: zónánként elosztva, hogy lent szelídebb, fent keményebb legyen a hegy
 	var plan := [
 		{"from": 3, "to": 26, "P": 4, "X": 1, "F": 2, "vals": [2, 2, 3, 3]},

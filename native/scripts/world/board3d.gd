@@ -51,6 +51,7 @@ var _dusk_now := 0.0
 
 static func get_for(b: Dictionary) -> Board3D:
 	if instance and is_instance_valid(instance) and instance.board == b:
+		instance.board = b
 		return instance
 	if instance and is_instance_valid(instance):
 		instance.queue_free()
@@ -776,7 +777,7 @@ func _update_camera(dt: float) -> void:
 		cam_pos = cam_pos.lerp(d[0], k)
 		cam_look_pos = cam_look_pos.lerp(d[1], k)
 	shake = max(0.0, shake - dt * 2.5)
-	var off := Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * shake * 0.25
+	var off := Vector3(FX.fr(-1, 1), FX.fr(-1, 1), 0) * shake * 0.25
 	camera.position = cam_pos + off
 	camera.look_at(cam_look_pos + off, Vector3.UP)
 

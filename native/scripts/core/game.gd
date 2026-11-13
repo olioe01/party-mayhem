@@ -4,6 +4,7 @@ extends Node
 var force_mg := ""
 var test_start_node := 0     # --start-node=N: hegymászás teszteléséhez, a rajt helyett innen indul mindenki
 var test_shots := false
+var test_tiles := ""         # --tiles=F|P|X: teszthez a rajt utáni sima mezők mind ilyenek lesznek
 
 
 func apply_args(args: PackedStringArray) -> void:
@@ -16,6 +17,8 @@ func apply_args(args: PackedStringArray) -> void:
 				G.mode = m
 		elif a.begins_with("--start-node="):
 			test_start_node = int(a.get_slice("=", 1))
+		elif a.begins_with("--tiles="):
+			test_tiles = a.get_slice("=", 1)
 		elif a.begins_with("--mg="):
 			force_mg = a.get_slice("=", 1)
 		elif a == "--small":
@@ -39,13 +42,23 @@ func after_boot(args: PackedStringArray) -> void:
 			shots_dir = a.get_slice("=", 1)
 		elif a.begins_with("--shot-every="):
 			shot_every = float(a.get_slice("=", 1))
+		elif a.begins_with("--portraits="):
+			_render_portraits(a.get_slice("=", 1))
+		elif a.begins_with("--join="):
+			Sync.join(a.get_slice("=", 1))
+		elif a == "--room":
+			Sync.open_room()
+		elif a == "--online-ui":
+			Main.I.online.open.call_deferred()
+		elif a == "--sync-log":
+			Sync.verbose = true
 		elif a.begins_with("--quit-at="):
 			var q := float(a.get_slice("=", 1))
 			get_tree().create_timer(q, true, false, true).timeout.connect(func(): get_tree().quit())
 	for i in nb:
 		Net.add_bot("Bot %d" % (i + 1))
 	if autostart:
-		get_tree().create_timer(1.5).timeout.connect(func(): Game.start_game())
+		get_tree().create_timer(1.5).timeout.connect(func(): Sync.submit({"k": "start"}))
 	if shots_dir != "":
 		DirAccess.make_dir_recursive_absolute(shots_dir)
 		var n := [0]
@@ -60,6 +73,54 @@ func after_boot(args: PackedStringArray) -> void:
 			if nm == "" and sc: nm = str(sc.get_script().resource_path.get_file().get_basename())
 			Main.I.screenshot("%s/%03d_%s.png" % [shots_dir, n[0], nm]))
 		tm.start()
+
+
+## --portraits=id1,id2 (vagy all): a figurák portréit kirendereli a web/img/chars mappába, majd kilép.
+func _render_portraits(which: String) -> void:
+	var ids: Array = []
+	for c in G.CHARS:
+		if which == "all" or which.split(",").has(c.id):
+			ids.append(c.id)
+	var vp := SubViewport.new()
+	vp.size = Vector2i(512, 512)
+	vp.transparent_bg = true
+	vp.own_world_3d = true
+	vp.msaa_3d = Viewport.MSAA_4X
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp)
+	var we := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0, 0, 0, 0)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("#dfe6ff")
+	env.ambient_light_energy = 0.75
+	we.environment = env
+	vp.add_child(we)
+	var cam := Camera3D.new()
+	cam.fov = 26
+	vp.add_child(cam)
+	cam.position = Vector3(0, 0.95, 3.25)
+	cam.look_at(Vector3(0, 0.6, 0))
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-38, 28, 0)
+	sun.light_energy = 1.25
+	vp.add_child(sun)
+	for id in ids:
+		var m := Chars3D.build(id)
+		m.rotation.y = -0.45
+		vp.add_child(m)
+		m.animate(0.016)
+		for i in 4:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var img := vp.get_texture().get_image()
+		img.resize(256, 256, Image.INTERPOLATE_LANCZOS)
+		img.save_png(ProjectSettings.globalize_path("res://web/img/chars/%s.png" % id))
+		print("portré: ", id)
+		m.queue_free()
+		await get_tree().process_frame
+	get_tree().quit()
 
 
 func on_join(pid: String, pname: String, is_bot: bool) -> void:
@@ -131,6 +192,11 @@ func start_game() -> void:
 	G.team_split = []
 	if G.is_mountain():
 		G.mountain = MountainLayout.build()
+		if test_tiles != "":
+			for nd in G.mountain.nodes:
+				if nd.type == "N" and nd.id > test_start_node and nd.id < test_start_node + 14:
+					nd.type = test_tiles
+					nd.val = 2
 		G.mtn_order = G.players.duplicate()
 		for p in G.players:
 			p.node = clampi(test_start_node, 0, G.mountain.goal - 1)
