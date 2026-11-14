@@ -97,7 +97,7 @@ func _ready() -> void:
 	_edit = LineEdit.new()
 	_edit.position = Vector2(490, 216)
 	_edit.size = Vector2(410, 56)
-	_edit.placeholder_text = "pl. ABC-DEFG"
+	_edit.placeholder_text = "pl. KX7PM"
 	_edit.max_length = 80
 	_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_edit.add_theme_font_size_override("font_size", 28)
@@ -200,8 +200,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _on_open_pressed() -> void:
-	if Sync.upnp_state == "ok":
-		DisplayServer.clipboard_set(Sync.make_code(Sync.public_ip, Sync.port()))
+	if Sync.room_state == "ok":
+		DisplayServer.clipboard_set(Sync.room_code)
 		_open_btn.text = "✔ Kimásolva!"
 		get_tree().create_timer(1.2, true, false, true).timeout.connect(_refresh)
 	else:
@@ -258,22 +258,21 @@ func _refresh() -> void:
 		var lan := Sync.lan_ip()
 		if lan != "":
 			t += "[b]Egy hálózaton vagy VPN-nel[/b] (Radmin VPN, Tailscale, Hamachi) elég a géped címe:\n[color=#ffd43b][b]%s%s[/b][/color]\n\n" % [lan, port_txt]
-		match Sync.upnp_state:
+		match Sync.room_state:
 			"working":
-				t += "[b]Interneten át:[/b] ⏳ egyeztetés a routerrel…"
+				t += "[b]Interneten át:[/b] ⏳ kapcsolódás a közvetítő szerverhez…\n[color=#a99fd6]Az este első szobanyitása akár egy percig is tarthat, amíg a szerver felébred.[/color]"
 			"ok":
-				t += "[b]Interneten át:[/b] ✅ a szoba nyitva! Ezt a kódot mondd be a barátaidnak:\n[font_size=46][color=#ffd43b][b]%s[/b][/color][/font_size]\n[color=#a99fd6](cím: %s:%d)[/color]" % [
-					Sync.make_code(Sync.public_ip, port), Sync.public_ip, port]
+				t += "[b]Interneten át:[/b] ✅ a szoba nyitva! Ezt a kódot mondd be a barátaidnak:\n[font_size=46][color=#ffd43b][b]%s[/b][/color][/font_size]" % Sync.room_code
 			"fail":
-				t += "[b]Interneten át:[/b] ❌ %s\n[color=#a99fd6]Megoldás: a routeren irányítsd a %d-es TCP portot erre a gépre, vagy használjatok ingyenes VPN-t, és a fenti helyett a VPN-ben látott címedet add meg.[/color]" % [Sync.upnp_msg, port]
+				t += "[b]Interneten át:[/b] ❌ %s\n[color=#a99fd6]Próbáld újra egy perc múlva. Egy hálózaton vagy VPN-nel a fenti cím e nélkül is működik.[/color]" % Sync.room_msg
 			_:
-				t += "[b]Interneten át:[/b] nyomd meg a lenti gombot – a játék megkéri a routert, hogy engedje be a barátaidat, és kapsz egy szobakódot."
+				t += "[b]Interneten át:[/b] nyomd meg a lenti gombot, és kapsz egy szobakódot, amit a barátaid beírnak. A routeren semmit nem kell állítani."
 		if Sync.pc_count() > 0:
 			t += "\n\n[color=#69db7c]🖥️ Csatlakozott gépek: %d[/color]" % Sync.pc_count()
 	_host_info.text = t
 	_open_btn.visible = not Sync.client
-	_open_btn.disabled = Sync.upnp_state == "working"
-	match Sync.upnp_state:
+	_open_btn.disabled = Sync.room_state == "working"
+	match Sync.room_state:
 		"working": _open_btn.text = "Egy pillanat…"
 		"ok": _open_btn.text = "📋 Kód másolása"
 		"fail": _open_btn.text = "Újrapróbálom"
@@ -281,7 +280,7 @@ func _refresh() -> void:
 
 	var j := ""
 	match Sync.state():
-		"connecting": j = "⏳ Csatlakozás ide: %s…" % Sync.address()
+		"connecting": j = "⏳ Csatlakozás: %s…" % Sync.address()
 		"retry": j = "🔌 Megszakadt a kapcsolat, újrapróbálkozás…"
 		"online":
 			j = "✅ Csatlakozva: %s\nA játékot a szoba gazdája indítja. A telefonodat a saját képernyőd QR-kódjával csatlakoztasd." % Sync.address()

@@ -27,7 +27,7 @@ Ha a QR-kód rossz címet mutat (például több hálózati kártya miatt), ind�
 
 Ha a barátaidnak is megvan a `PartyMayhem.exe`, nem kell képernyőt megosztani: mindenki a saját gépén futtatja és látja a játékot, a gépek között csak a gombnyomások utaznak, ezért nincs videókésés.
 
-1. **A szoba gazdája** a lobbyban megnyomja a **🌐 Online játék** gombot (vagy az `O` billentyűt), majd a **Szoba megnyitása az interneten** gombot. A játék megkéri a routert, hogy engedje be a többieket (UPnP), és kiír egy rövid **szobakódot** (pl. `ABC-DEFG`).
+1. **A szoba gazdája** a lobbyban megnyomja a **🌐 Online játék** gombot (vagy az `O` billentyűt), majd a **Szoba megnyitása az interneten** gombot. A játék kapcsolódik a közvetítő szerverhez, és kiír egy rövid **szobakódot** (pl. `KX7PM`). A routeren semmit nem kell állítani, és VPN sem kell.
 2. **A többiek** ugyanitt beírják a kódot a jobb oldali mezőbe, és **Csatlakozás**. Pár másodperc múlva ugyanazt a lobbyt látják.
 3. **A telefonját mindenki a saját képernyőjén lévő QR-kóddal** csatlakoztatja (a saját Wi-Fi-jén). A játékot bármelyik gépről el lehet indítani (ENTER vagy az INDÍTÁS gomb), illetve a ⭐ VIP telefonjáról.
 
@@ -35,9 +35,10 @@ Tudnivalók:
 - Menet közben is be lehet szállni, illetve vissza lehet jönni: a játék pár másodperc alatt felzárkózik. Aki játék közben érkezik új telefonnal, az a következő játékban kap helyet.
 - Ha megszakad a kapcsolat, a vendég gép magától újrapróbálkozik; ha nem sikerül, visszakerül a saját lobbyjába. A lecsatlakozott gép játékosai helyett addig a bot játszik.
 - Mindenkinek **ugyanaz a játékverzió** kell (eltérő verziónál a csatlakozás hibaüzenettel elutasítja).
-- **Ha a router nem engedi az automatikus portnyitást** (a panel ezt kiírja): vagy irányítsd a routeren a 3001-es TCP portot a szoba gazdájának gépére, vagy használjatok ingyenes VPN-t (Radmin VPN, Tailscale, Hamachi), és a kód helyett a gazda VPN-ben látott IP-címét írjátok be. Egy hálózaton belül elég a gép helyi IP-címe.
-- A Windows tűzfal első indításkor rákérdez: a szoba gazdájánál engedélyezni kell – azt a hálózattípust pipáld be, amelyikre a géped csatlakozik (ha bizonytalan vagy, mindkettőt).
-- Parancssorból: `PartyMayhem.exe -- --join=ABC-DEFG` (vagy `--join=192.168.1.23`) azonnal csatlakozik, a `-- --room` indításkor megnyitja a szobát.
+- **Az este első szobanyitása akár egy percig is tarthat:** az ingyenes közvetítő szerver használaton kívül elalszik, és ennyi idő, amíg felébred. Játék közben nem alszik el.
+- A közvetítő szerver kódja a `../relay/` mappában van (Node, a Renderen fut); a játékba épített címe a `core/sync.gd` `RELAY_DEFAULT` állandója.
+- **Egy hálózaton belül vagy VPN-nel** (Radmin VPN, Tailscale, Hamachi) szerver nélkül is megy: a kód helyett a gazda gépének IP-címét kell beírni. Ilyenkor a Windows tűzfal kérdésénél a gazdának engedélyeznie kell a játékot.
+- Parancssorból: `PartyMayhem.exe -- --join=KX7PM` (vagy `--join=192.168.1.23`) azonnal csatlakozik, a `-- --room` indításkor megnyitja a szobát. Teszthez `--relay=ws://127.0.0.1:8787` (a `--room` / `--join` elé írva) másik közvetítő szervert ad meg.
 
 ## Két nagy játékmód
 
@@ -130,7 +131,7 @@ Tesztelési kapcsolók (a `--` után): `--bots=4`, `--autostart`, `--rounds=2`, 
 native/
   main.tscn, scripts/main.gd     jelenetváltás, 2D réteg, részecskék, billentyűk
   scripts/core/                  net (web- és WebSocket-szerver, botok), state, game, audio, qr, draw
-                                 sync (online játék: lépésütem, eseményfolyam, szobakód, UPnP),
+                                 sync (online játék: lépésütem, eseményfolyam, szobakód, szoba a közvetítő szerveren),
                                  snapshot (állapotmentés jelenetváltáskor), online_ui (a lobby online panelje)
   scripts/world/                 board_layout (pálya), board3d (3D tábla, kamera), chars3d (18 figura),
                                  mountain_layout + mountain3d (a hegymászás pályája és 3D hegye)

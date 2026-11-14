@@ -17,6 +17,8 @@ const PROTO := 1
 const TICK := 1.0 / 60.0
 const BUFFER := 2              # a vendég ennyi lépéssel jár a hoszt mögött (hálózati ingadozás ellen)
 const DEFAULT_PORT := 3001
+const RELAY_DEFAULT := "wss://party-mayhem.onrender.com"
+const ROOM_CODE_LEN := 5
 const CODE_ALPHA := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const PC_EVENTS := ["join", "leave", "in", "key", "click"]
 
@@ -56,13 +58,16 @@ var _in_ck := {}               # lépés -> mentés
 var _init_tick := -1
 var _refill := false
 
-# --- szoba megnyitása az internet felé (UPnP)
-var upnp_state := ""           # "" | "working" | "ok" | "fail"
-var upnp_msg := ""
-var public_ip := ""
-var _upnp: UPNP = null
-var _upnp_thread: Thread = null
-var _upnp_port := 0
+# --- szoba megnyitása az interneten (közvetítő szerveren át: se portnyitás, se VPN nem kell)
+var relay_url := RELAY_DEFAULT
+var room_state := ""           # "" | "working" | "ok" | "fail"
+var room_msg := ""
+var room_code := ""
+var _room_ws: WebSocketPeer = null
+var _room_key := ""
+var _room_t0 := 0              # mióta próbálkozunk (ms)
+var _room_try_t := 0           # az utolsó kapcsolódási kísérlet vége (ms)
+var _room_ping_t := 0
 
 
 func _ready() -> void:
@@ -73,10 +78,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	if _upnp_thread:
-		_upnp_thread.wait_to_finish()
-	if _upnp and upnp_state == "ok":
-		_upnp.delete_port_mapping(_upnp_port, "TCP")
+	close_room()
 
 
 func log_line(s: String) -> void:
@@ -88,6 +90,7 @@ func log_line(s: String) -> void:
 ## A Main hívja képkockánként: ennyi játéklépést futtat le.
 func frame(dt: float) -> void:
 	_poll_client()
+	_poll_room()
 	if client:
 		_client_frame(dt)
 	else:
@@ -312,6 +315,7 @@ func join(text: String) -> bool:
 		_close_ws()
 		if client:
 			_become_host("")
+	close_room()
 	_addr = a
 	_retries = 0
 	error = ""
@@ -326,13 +330,16 @@ func _connect() -> void:
 	_ws.max_queued_packets = 16384
 	_hello_sent = false
 	_state_t = Time.get_ticks_msec()
-	if _ws.connect_to_url("ws://" + _addr) != OK:
+	var url := "ws://" + _addr
+	if _addr.begins_with("relay:"):
+		url = "%s/join?code=%s" % [relay_url, _addr.trim_prefix("relay:")]
+	if _ws.connect_to_url(url) != OK:
 		_ws = null
-		_fail("Nem sikerült csatlakozni ide: %s" % _addr)
+		_fail("Nem sikerült csatlakozni ide: %s" % address())
 		return
 	if _state != "retry":
 		_state = "connecting"
-	log_line("csatlakozás: %s" % _addr)
+	log_line("csatlakozás: %s" % address())
 	changed.emit()
 
 
@@ -355,7 +362,10 @@ func state() -> String:
 	return _state
 
 
+## A szoba, ahová csatlakozunk, kiírható formában.
 func address() -> String:
+	if _addr.begins_with("relay:"):
+		return "%s szoba" % _addr.trim_prefix("relay:")
 	return _addr
 
 
@@ -380,10 +390,15 @@ func _poll_client() -> void:
 	if st == WebSocketPeer.STATE_OPEN:
 		if not _hello_sent:
 			_hello_sent = true
+			_ws.set_no_delay(true)
 			_ws.send_text(JSON.stringify({"e": "pc:hello", "d": {"v": PROTO, "b": version}}))
 		while _ws and _ws.get_available_packet_count() > 0:
 			var raw := _ws.get_packet()
 			if _ws.was_string_packet():
+				# szöveget csak a közvetítő szerver küld (pl. nincs ilyen szoba)
+				var j = JSON.parse_string(raw.get_string_from_utf8())
+				if typeof(j) == TYPE_DICTIONARY and str(j.get("t", "")) == "err":
+					_on_host_msg(j)
 				continue
 			var m = bytes_to_var(raw)
 			if typeof(m) == TYPE_DICTIONARY:
@@ -572,29 +587,8 @@ func _become_host(msg: String) -> void:
 
 
 # ------------------------------------------------------------------ szobakód
-## IPv4-cím (+ port) rövid, lediktálható kóddá. Az alap portnál 7 jel: ABC-DEFG.
-static func make_code(ip: String, port: int) -> String:
-	var parts := ip.split(".")
-	if parts.size() != 4:
-		return ""
-	var v := 0
-	for s in parts:
-		if not s.is_valid_int():
-			return ""
-		v = (v << 8) | (int(s) & 255)
-	var n := 7
-	if port != DEFAULT_PORT:
-		v = (v << 16) | (port & 0xffff)
-		n = 10
-	var out := ""
-	for i in n:
-		out = CODE_ALPHA[v & 31] + out
-		v >>= 5
-	var cut := 3 if n == 7 else 5
-	return out.substr(0, cut) + "-" + out.substr(cut)
-
-
-## Szobakód vagy cím -> "gép:port", hibás bemenetre "".
+## Szobakód vagy cím -> "relay:KÓD" vagy "gép:port", hibás bemenetre "".
+## (A 7 és 10 jeles kód a régi, címet kódoló forma.)
 static func parse_target(text: String) -> String:
 	var s := text.strip_edges()
 	for pre in ["ws://", "http://", "https://"]:
@@ -615,6 +609,8 @@ static func parse_target(text: String) -> String:
 	for ch in s.to_upper():
 		if CODE_ALPHA.contains(ch):
 			clean += ch
+	if clean.length() == ROOM_CODE_LEN:
+		return "relay:" + clean      # a közvetítő szerveren nyitott szoba
 	if clean.length() != 7 and clean.length() != 10:
 		return ""
 	var v := 0
@@ -629,17 +625,6 @@ static func parse_target(text: String) -> String:
 	return "%d.%d.%d.%d:%d" % [(v >> 24) & 255, (v >> 16) & 255, (v >> 8) & 255, v & 255, port]
 
 
-static func is_private_ip(ip: String) -> bool:
-	if ip.begins_with("10.") or ip.begins_with("192.168.") or ip.begins_with("127.") or ip.begins_with("169.254."):
-		return true
-	var p := ip.split(".")
-	if p.size() == 4 and p[0] == "172" and int(p[1]) >= 16 and int(p[1]) <= 31:
-		return true
-	if p.size() == 4 and p[0] == "100" and int(p[1]) >= 64 and int(p[1]) <= 127:
-		return true    # szolgáltatói NAT (CGNAT)
-	return false
-
-
 func port() -> int:
 	return Net.ws_port
 
@@ -649,45 +634,99 @@ func lan_ip() -> String:
 	return Net.addresses[0] if Net.addresses.size() else ""
 
 
-# ------------------------------------------------------------------ UPnP
-## Megkéri a routert, hogy engedje be a szoba portját az internet felől, és lekéri a nyilvános címet.
-func open_room() -> void:
-	if upnp_state == "working" or upnp_state == "ok":
+# ------------------------------------------------------------------ szoba a közvetítő szerveren
+## Szobát nyit a közvetítő szerveren, és kódot kap hozzá. Mindkét oldal kifelé csatlakozik,
+## ezért nem számít, milyen router vagy szolgáltató mögött ülnek a játékosok.
+func open_room(want_code := "") -> void:
+	if client or room_state == "working" or room_state == "ok":
 		return
-	if _upnp_thread:
-		_upnp_thread.wait_to_finish()
-	upnp_state = "working"
-	upnp_msg = ""
-	_upnp_port = port()
-	_upnp_thread = Thread.new()
-	_upnp_thread.start(_upnp_work.bind(_upnp_port))
+	if _room_key == "":
+		# nem a játékmenet véletlenjéből: az a gépek között közös
+		_room_key = Crypto.new().generate_random_bytes(12).hex_encode()
+	if want_code != "":
+		room_code = want_code.to_upper()
+	room_state = "working"
+	room_msg = ""
+	_room_t0 = Time.get_ticks_msec()
+	_room_connect()
 	changed.emit()
 
 
-func _upnp_work(p: int) -> void:
-	var u := UPNP.new()
-	var ok := false
-	var ip := ""
-	var msg := ""
-	if u.discover(2500, 2, "InternetGatewayDevice") != UPNP.UPNP_RESULT_SUCCESS or u.get_gateway() == null or not u.get_gateway().is_valid_gateway():
-		msg = "A router nem engedi az automatikus portnyitást (UPnP)."
-	elif u.add_port_mapping(p, p, "Party Mayhem", "TCP", 0) != UPNP.UPNP_RESULT_SUCCESS:
-		msg = "A router elutasította a portnyitást."
-	else:
-		ip = u.query_external_address()
-		if ip == "" or not ip.is_valid_ip_address():
-			msg = "A router nem árulta el a nyilvános címet."
-		elif is_private_ip(ip):
-			msg = "A szolgáltatód nem ad nyilvános címet (közös NAT mögött vagy)."
-		else:
-			ok = true
-	_upnp_done.call_deferred(u, ok, ip, msg)
+func close_room() -> void:
+	if _room_ws:
+		_room_ws.close()
+	_room_ws = null
+	if room_state != "":
+		room_state = ""
+		room_msg = ""
+		changed.emit()
 
 
-func _upnp_done(u: UPNP, ok: bool, ip: String, msg: String) -> void:
-	_upnp = u
-	public_ip = ip if ok else ""
-	upnp_msg = msg
-	upnp_state = "ok" if ok else "fail"
-	log_line("UPnP: %s %s %s" % [upnp_state, ip, msg])
+func _room_connect() -> void:
+	_room_ws = WebSocketPeer.new()
+	_room_try_t = Time.get_ticks_msec()
+	var url := "%s/host?key=%s" % [relay_url, _room_key]
+	if room_code != "":
+		url += "&code=" + room_code      # megszakadás után ugyanazt a kódot kérjük vissza
+	if _room_ws.connect_to_url(url) != OK:
+		_room_ws = null
+
+
+func _room_fail(msg: String) -> void:
+	if _room_ws:
+		_room_ws.close()
+	_room_ws = null
+	room_state = "fail"
+	room_msg = msg
+	log_line("szoba: hiba: %s" % msg)
 	changed.emit()
+
+
+func _poll_room() -> void:
+	if room_state != "working" and room_state != "ok":
+		return
+	var now := Time.get_ticks_msec()
+	if _room_ws == null:
+		# az ingyenes szerver használaton kívül elalszik, az ébredése kb. egy perc: addig próbálkozunk
+		if now - _room_t0 > 150000:
+			_room_fail("A közvetítő szerver most nem érhető el.")
+		elif now - _room_try_t > 3000:
+			_room_connect()
+		return
+	_room_ws.poll()
+	var st := _room_ws.get_ready_state()
+	if st == WebSocketPeer.STATE_OPEN:
+		while _room_ws and _room_ws.get_available_packet_count() > 0:
+			var m = JSON.parse_string(_room_ws.get_packet().get_string_from_utf8())
+			if typeof(m) == TYPE_DICTIONARY:
+				_on_room_msg(m)
+		if _room_ws and now - _room_ping_t > 15000:
+			_room_ping_t = now
+			_room_ws.send_text("{\"t\":\"ping\"}")
+	elif st == WebSocketPeer.STATE_CONNECTING and now - _room_try_t > 25000:
+		_room_ws.close()
+		_room_ws = null
+		_room_try_t = now
+	elif st == WebSocketPeer.STATE_CLOSED:
+		_room_ws = null
+		_room_try_t = now
+		if room_state == "ok":
+			room_state = "working"
+			_room_t0 = now
+			log_line("szoba: megszakadt a kapcsolat a közvetítő szerverrel, újrapróbálkozás")
+			changed.emit()
+
+
+func _on_room_msg(m: Dictionary) -> void:
+	match str(m.get("t", "")):
+		"room":
+			room_code = str(m.get("code", ""))
+			room_state = "ok"
+			log_line("szoba nyitva, kód: %s" % room_code)
+			changed.emit()
+		"guest":
+			# a vendéghez külön kapcsolatot nyitunk a szerverre; onnantól ugyanúgy kezeljük,
+			# mintha közvetlenül hozzánk csatlakozott volna
+			Net.connect_out("%s/pipe?code=%s&id=%s&key=%s" % [relay_url, room_code, str(m.get("id", "")).uri_encode(), _room_key])
+		"err":
+			_room_fail(str(m.get("m", "A közvetítő szerver elutasította a szobát.")))

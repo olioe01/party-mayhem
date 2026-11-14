@@ -46,8 +46,10 @@ func after_boot(args: PackedStringArray) -> void:
 			_render_portraits(a.get_slice("=", 1))
 		elif a.begins_with("--join="):
 			Sync.join(a.get_slice("=", 1))
-		elif a == "--room":
-			Sync.open_room()
+		elif a.begins_with("--relay="):      # a --room / --join elé kell írni
+			Sync.relay_url = a.get_slice("=", 1)
+		elif a == "--room" or a.begins_with("--room="):
+			Sync.open_room(a.get_slice("=", 1) if a.contains("=") else "")
 		elif a == "--online-ui":
 			Main.I.online.open.call_deferred()
 		elif a == "--sync-log":

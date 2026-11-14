@@ -214,9 +214,15 @@ func _poll_ws() -> void:
 		ws.poll()
 		var st := ws.get_ready_state()
 		if st == WebSocketPeer.STATE_OPEN:
+			if c.get("out", false):
+				c["out"] = false
+				ws.set_no_delay(true)
 			while ws.get_available_packet_count() > 0:
 				var txt := ws.get_packet().get_string_from_utf8()
 				_on_ws_message(c, txt)
+		elif st == WebSocketPeer.STATE_CONNECTING and c.get("out", false) and Time.get_ticks_msec() - int(c.t) > 15000:
+			ws.close()
+			_ws_conns.erase(c)
 		elif st == WebSocketPeer.STATE_CLOSED:
 			_ws_conns.erase(c)
 			if c.pc:
@@ -224,6 +230,17 @@ func _poll_ws() -> void:
 			elif c.pid != "" and is_same(_pid_conn.get(c.pid), c):
 				_pid_conn.erase(c.pid)
 				Sync.submit({"k": "leave", "pid": c.pid})
+
+
+## Kifelé nyitott kapcsolat (a közvetítő szerveren át érkező vendég gép): a megnyitása után
+## ugyanúgy kezeljük, mint a hozzánk befutó kapcsolatokat.
+func connect_out(url: String) -> void:
+	var ws := WebSocketPeer.new()
+	ws.inbound_buffer_size = 65536
+	ws.outbound_buffer_size = 4 << 20
+	ws.max_queued_packets = 8192
+	if ws.connect_to_url(url) == OK:
+		_ws_conns.append({"ws": ws, "pid": "", "name": "", "pc": false, "out": true, "t": Time.get_ticks_msec()})
 
 
 func clean(v, max_len: int) -> String:
