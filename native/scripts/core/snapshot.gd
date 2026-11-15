@@ -23,7 +23,7 @@ const CLASS_FILES := [
 const G_SKIP := ["portraits"]
 const SCENE_SKIP := ["_timers", "buttons"]
 const NET_KEYS := ["bots", "away", "layouts", "_seq"]
-const GAME_KEYS := ["force_mg", "test_start_node", "test_tiles"]
+const GAME_KEYS := ["force_mg", "test_start_node", "test_tiles", "mgtest_auto", "mgtest_i"]
 
 static var _name_of := {}      # Script -> név
 static var _script_of := {}    # név -> Script

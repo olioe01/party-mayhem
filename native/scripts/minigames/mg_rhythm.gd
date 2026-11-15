@@ -31,7 +31,7 @@ func meta() -> Dictionary:
 
 
 func layout(_p) -> Dictionary:
-	return {"mode": "pads", "enabled": true, "pads": PADS, "title": "🥁 Üsd ütemre!"}
+	return {"mode": "pads", "row": true, "enabled": true, "pads": PADS, "title": "🥁 Üsd ütemre!"}
 
 
 func _ready() -> void:

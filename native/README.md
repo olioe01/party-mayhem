@@ -14,6 +14,7 @@ Ez a Party Mayhem önálló, telepítés nélkül futtatható változata, Godot 
 | `M` | hang ki/be |
 | `B` | bot hozzáadása (lobby) |
 | `J` | játékmód váltása (lobby) |
+| `T` | minijáték teszt: a minijátékok tét nélkül kipróbálhatók (lobby) |
 | `←` `→` | körök száma (lobby) |
 | `ENTER` | indítás / tovább |
 | `O` | online játék (szoba nyitása / csatlakozás) |

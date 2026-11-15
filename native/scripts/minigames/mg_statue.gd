@@ -42,6 +42,7 @@ func _ready() -> void:
 			var x: float = side * (7.5 + (k % 2) * 0.8)
 			Chars3D.cyl(self, 0.18, 0.24, 1.2, Chars3D.mat("#8b5e34"), x, 0.6, z, 8)
 			Chars3D.sphere(self, 1.0, Chars3D.mat("#3f9d45"), x, 1.8, z, 1, 1.1, 1)
+	_decor()
 	# Bagoly-őr (saját, kódból épített figura)
 	guard = Node3D.new()
 	guard.position = Vector3(0, 0, -GOAL - 2.5)
@@ -68,6 +69,85 @@ func _ready() -> void:
 		st.append({"p": p, "x": (i - (n - 1) / 2.0) * lane, "z": 0.0, "disp": 0.0, "fin": -1.0, "caught_t": -9.0, "bot_t": 0.0, "m": m,
 			"bot_risk": randf_range(0.0, 0.35), "place": 0})
 	_sync(0.0)
+
+
+## Díszlet: erdei tisztás futósávokkal, kerítéssel, lámpásokkal, célkapuval és a bagoly kőtalapzatával.
+func _decor() -> void:
+	var rnd := BoardLayout.Seeded.new(31)
+	var wood := Chars3D.mat("#8b5e34", {"rough": 0.9})
+	var dark_wood := Chars3D.mat("#5c3d1e", {"rough": 0.9})
+	var stone := Chars3D.mat("#8d8a94", {"rough": 1.0})
+	var stone2 := Chars3D.mat("#6f6b78", {"rough": 1.0})
+	# váltakozó fűcsíkok és egy döngölt földút középen
+	for i in 8:
+		Chars3D.box(self, 15.6, 0.012, 1.0, Chars3D.mat("#79bb4f"), Vector3(0, 0.004, -i * 2.0 - 1.0))
+	Chars3D.box(self, 15.6, 0.01, 2.2, Chars3D.mat("#c9a86a", {"rough": 1.0}), Vector3(0, 0.006, 1.6))
+	# rajtvonal kockás csíkkal
+	for k in 26:
+		Chars3D.box(self, 0.6, 0.02, 0.3, Chars3D.mat("#ffffff" if k % 2 == 0 else "#2b2140"), Vector3(-7.5 + k * 0.6, 0.015, 0.45))
+	# kerítés a két oldalon
+	for side in [-1, 1]:
+		var fx: float = side * 8.2
+		for k in 13:
+			var z := 2.0 - k * 1.6
+			Chars3D.lcyl(self, 0.09, 0.11, 0.9, wood, fx, 0.45, z, 6)
+			Chars3D.lcone(self, 0.12, 0.16, dark_wood, fx, 0.98, z, 6)
+		Chars3D.box(self, 0.07, 0.1, 19.6, wood, Vector3(fx, 0.62, -7.6))
+		Chars3D.box(self, 0.07, 0.1, 19.6, wood, Vector3(fx, 0.3, -7.6))
+		# lámpások oszlopon
+		for k in 4:
+			var z := -1.0 - k * 5.0
+			var lx: float = side * 8.9
+			Chars3D.lcyl(self, 0.07, 0.09, 2.2, dark_wood, lx, 1.1, z, 6)
+			Chars3D.box(self, 0.34, 0.4, 0.34, Chars3D.mat("#ffe066", {"emit": "#ffd43b", "emit_e": 1.6}), Vector3(lx, 2.35, z))
+			Chars3D.lcone(self, 0.3, 0.22, dark_wood, lx, 2.66, z, 4)
+		# bokrok, sziklák, gombák, virágok a pálya szélén
+		for k in 9:
+			var z := 2.5 - k * 2.4 + rnd.next() * 0.8
+			var bx: float = side * (9.6 + rnd.next() * 2.2)
+			var r := 0.45 + rnd.next() * 0.4
+			Chars3D.lsphere(self, r, Chars3D.mat("#2f8f3a" if k % 2 == 0 else "#4caf50"), bx, r * 0.6, z, 1.2, 0.8, 1.0)
+			if k % 3 == 0:
+				Chars3D.lsphere(self, 0.4 + rnd.next() * 0.3, stone if k % 2 == 0 else stone2, bx - side * 1.1, 0.2, z + 0.9, 1.2, 0.7, 1.0, 6, 4)
+			if k % 3 == 1:
+				var mx: float = bx - side * 0.9
+				Chars3D.lcyl(self, 0.07, 0.09, 0.3, Chars3D.mat("#f5efe0"), mx, 0.15, z + 0.6, 6)
+				Chars3D.lsphere(self, 0.2, Chars3D.mat("#e03131"), mx, 0.32, z + 0.6, 1.0, 0.6, 1.0, 8, 4)
+		for k in 14:
+			var fz := 2.0 - rnd.next() * 18.0
+			var flx: float = side * (8.5 + rnd.next() * 0.5)
+			Chars3D.lsphere(self, 0.09, Chars3D.mat(["#ff8fa3", "#ffd43b", "#ffffff", "#b197fc"][k % 4]), flx, 0.12, fz, 1.0, 0.6, 1.0, 6, 3)
+	# hátsó fenyves és dombok
+	for k in 11:
+		var x := -15.0 + k * 3.0 + rnd.next() * 1.2
+		var z := -GOAL - 6.5 - rnd.next() * 3.0
+		var h := 2.6 + rnd.next() * 1.8
+		Chars3D.lcyl(self, 0.16, 0.22, 0.9, dark_wood, x, 0.45, z, 6)
+		for j in 3:
+			Chars3D.lcone(self, 1.25 - j * 0.3, h * 0.5, Chars3D.mat("#1f6b3a" if j % 2 == 0 else "#2b8a4a"), x, 0.9 + j * h * 0.27 + h * 0.25, z, 7)
+	for k in 4:
+		Chars3D.lsphere(self, 7.0, Chars3D.mat("#5aa84a", {"rough": 1.0}), -16.0 + k * 11.0, -3.6, -GOAL - 13.0, 1.4, 0.8, 1.0, 10, 5)
+	# célkapu: két oszlop, gerenda, zászlók
+	for side in [-1, 1]:
+		Chars3D.lcyl(self, 0.18, 0.22, 3.2, wood, side * 7.6, 1.6, -GOAL, 8)
+		Chars3D.lsphere(self, 0.26, Chars3D.mat("#ffd43b", {"metal": 0.5, "rough": 0.3}), side * 7.6, 3.3, -GOAL)
+	Chars3D.box(self, 15.4, 0.22, 0.22, dark_wood, Vector3(0, 3.0, -GOAL))
+	for k in 15:
+		Chars3D.lcone(self, 0.22, 0.42, Chars3D.mat(["#ff4d6d", "#ffd43b", "#4dabf7", "#51cf66"][k % 4]), -7.0 + k * 1.0, 2.66, -GOAL, 3, Vector3(PI, 0, 0))
+	# a bagoly kőtalapzata lépcsővel és két fáklyával
+	Chars3D.lcyl(self, 2.5, 2.8, 0.3, stone2, 0, 0.0, -GOAL - 2.5, 10)
+	Chars3D.lcyl(self, 2.0, 2.3, 0.26, stone, 0, 0.02, -GOAL - 2.5, 10)
+	for side in [-1, 1]:
+		var tx: float = side * 3.3
+		Chars3D.lcyl(self, 0.22, 0.3, 1.5, stone, tx, 0.75, -GOAL - 1.4, 6)
+		Chars3D.lcyl(self, 0.32, 0.2, 0.2, stone2, tx, 1.58, -GOAL - 1.4, 6)
+		Chars3D.lcone(self, 0.2, 0.55, Chars3D.mat("#ff922b", {"emit": "#ff922b", "emit_e": 2.5}), tx, 1.95, -GOAL - 1.4, 5)
+		var lamp := OmniLight3D.new()
+		lamp.light_color = Color("#ffb347")
+		lamp.light_energy = 1.2
+		lamp.omni_range = 5.0
+		lamp.position = Vector3(tx, 2.1, -GOAL - 1.4)
+		add_child(lamp)
 
 
 func _entry(p) -> Dictionary:

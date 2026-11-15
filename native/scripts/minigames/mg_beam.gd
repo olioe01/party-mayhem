@@ -7,9 +7,10 @@ const RADIUS := 3.6
 const BEAM_H := 0.55
 const GRAV := 26.0
 const JUMP_V := 8.6
+const DROP_T := 2.0            # ennyi idő alatt ereszkedik le egy új rönk; addig nem üt
 
 var st: Array = []
-var beams: Array = []          # [{node, angle, dir}]
+var beams: Array = []          # [{node, angle, born, safe}]: safe = akiket az érkezéskor ért, amíg el nem hagyja őket
 var speed := 1.1
 var out_order: Array = []
 var end_at := -1.0
@@ -19,7 +20,7 @@ var next_flip := 12.0
 func meta() -> Dictionary:
 	return {"id": "beam", "name": "Forgó gerenda", "icon": "🪵", "color": "#a0703c", "modes": ["ffa", "2v2", "1v3"],
 		"tagline": "Ugrálj, amíg bírod!",
-		"desc": "Egy tüskés farönk forog körbe a platformon, és egyre gyorsul. Ugorj át rajta, amikor odaér hozzád! Később egy második rönk is megjelenik, és néha irányt váltanak. Az utolsó talpon maradó nyer.",
+		"desc": "Egy tüskés farönk forog körbe a platformon, és egyre gyorsul. Ugorj át rajta, amikor odaér hozzád! Később egy második rönk is leereszkedik fentről, és néha irányt váltanak. Az utolsó talpon maradó nyer.",
 		"controls": "Koppints az UGRÁS gombra, amikor a rönk odaér hozzád. Ne ugorj túl korán!"}
 
 
@@ -42,7 +43,7 @@ func _ready() -> void:
 		var d := 9.0 + rnd.next() * 10.0
 		var c := Chars3D.sphere(self, 1.5 + rnd.next() * 1.5, cm, cos(a) * d, -5 - rnd.next() * 3, sin(a) * d - 4, 1.6, 0.5, 1.0)
 		c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	beams.append(_make_beam(0.0))
+	beams.append(_make_beam(0.0, -99.0))
 	var n := players.size()
 	for i in n:
 		var p = players[i]
@@ -54,7 +55,7 @@ func _ready() -> void:
 	_sync(0.0)
 
 
-func _make_beam(angle: float) -> Dictionary:
+func _make_beam(angle: float, born: float) -> Dictionary:
 	var pivot := Node3D.new()
 	add_child(pivot)
 	var log_m := Chars3D.mat("#8b5e34", {"rough": 0.9})
@@ -64,7 +65,7 @@ func _make_beam(angle: float) -> Dictionary:
 		var x := 1.0 + k * 0.62
 		Chars3D.cone(pivot, 0.09, 0.32, Chars3D.mat("#e5e7eb", {"metal": 0.6, "rough": 0.3}), x, BEAM_H + 0.38, 0, 6)
 	Chars3D.cyl(pivot, 0.34, 0.34, 0.08, Chars3D.mat("#f2d18b"), RADIUS + 1.75, BEAM_H, 0, 14, Vector3(0, 0, PI / 2))
-	return {"node": pivot, "angle": angle}
+	return {"node": pivot, "angle": angle, "born": born, "safe": {}, "armed": born < 0.0}
 
 
 func _entry(p) -> Dictionary:
@@ -93,6 +94,8 @@ func bot(p, _dt: float) -> void:
 	for b in beams:
 		var da := angle_difference(b.angle, s.a) * (1.0 if speed >= 0 else -1.0)
 		var time_to: float = da / abs(speed) if da > 0 else INF
+		if not b.armed:
+			time_to = max(time_to, b.born + DROP_T - t)
 		if time_to < 0.2 + s.bot_err and time_to > 0.05:
 			if randf() < s.bot_skill:
 				input(p, {"t": "tap"})
@@ -104,7 +107,7 @@ func bot(p, _dt: float) -> void:
 func update(dt: float) -> void:
 	speed = sign(speed) * min(3.6, 1.1 + t * 0.055)
 	if t > 18 and beams.size() == 1:
-		beams.append(_make_beam(beams[0].angle + PI))
+		beams.append(_make_beam(_free_angle(), t))
 		Audio.play("whoosh")
 	if t > next_flip:
 		next_flip = t + randf_range(7, 12)
@@ -112,6 +115,12 @@ func update(dt: float) -> void:
 		Audio.play("select")
 	for b in beams:
 		b.angle = wrapf(b.angle + speed * dt, -PI, PI)
+		if not b.armed and t >= b.born + DROP_T:
+			# most ért le: akire éppen ráérkezett, azt nem üti meg, amíg el nem halad mellőle
+			b.armed = true
+			for s in st:
+				if not s.out and abs(angle_difference(b.angle, s.a)) < 0.4:
+					b.safe[s.p.pid] = true
 	for s in st:
 		if s.out:
 			s.fly += dt
@@ -125,7 +134,14 @@ func update(dt: float) -> void:
 				(s.m as Chars3D.CharModel).land = 1.0
 				(s.m as Chars3D.CharModel).airborne = 0.0
 		for b in beams:
-			if abs(angle_difference(b.angle, s.a)) < 0.16 and s.h < BEAM_H + 0.25:
+			if not b.armed:
+				continue
+			var near: float = abs(angle_difference(b.angle, s.a))
+			if b.safe.has(s.p.pid):
+				if near >= 0.4:
+					b.safe.erase(s.p.pid)
+				continue
+			if near < 0.16 and s.h < BEAM_H + 0.25:
 				s.out = true
 				s.fly_dir = sign(speed)
 				out_order.append(s)
@@ -147,6 +163,22 @@ func update(dt: float) -> void:
 	_sync(dt)
 
 
+## Az új rönk ott jelenik meg, ahol a legmesszebb van minden játékostól (és a másik rönktől).
+func _free_angle() -> float:
+	var best: float = beams[0].angle + PI
+	var best_d := -1.0
+	for k in 24:
+		var a := -PI + k * TAU / 24.0
+		var d: float = abs(angle_difference(a, beams[0].angle)) * 0.5
+		for s in st:
+			if not s.out:
+				d = min(d, abs(angle_difference(a, s.a)))
+		if d > best_d:
+			best_d = d
+			best = a
+	return best
+
+
 func idle(dt: float) -> void:
 	_sync(dt)
 
@@ -158,6 +190,8 @@ func _pos(s: Dictionary) -> Vector3:
 func _sync(dt: float) -> void:
 	for b in beams:
 		(b.node as Node3D).rotation.y = -b.angle
+		var k: float = clamp((t - b.born) / DROP_T, 0.0, 1.0)
+		(b.node as Node3D).position.y = (1.0 - D.ease_out_cubic(k)) * 4.0
 	for s in st:
 		var m: Chars3D.CharModel = s.m
 		var a := m.animate(dt)

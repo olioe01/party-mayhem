@@ -1,5 +1,6 @@
 extends Minigame
-## Színmemória – ismételd meg a felvillanó sorozatot. Legfeljebb 10 színig: aki odáig eljut, holtversenyben nyer.
+## Színmemória – ismételd meg a felvillanó sorozatot. 5 színnel indul, legfeljebb 10-ig megy.
+## A nagy képernyő a beírás alatt nem árulja el a megoldást: a haladás színtelen pöttyökkel látszik.
 
 const PADS := [
 	{"color": "#ff4d6d", "shape": "▲"},
@@ -10,6 +11,7 @@ const PADS := [
 const STEP := 0.6
 const LIT := 0.42
 const MAXLEN := 10
+const START_LEN := 5
 
 var seq: Array = []
 var alive := {}
@@ -25,7 +27,7 @@ var flash := {}
 func meta() -> Dictionary:
 	return {"id": "memory", "name": "Színmemória", "icon": "🧠", "color": "#4dabf7", "modes": ["ffa", "2v2", "1v3"],
 		"tagline": "Ki bírja a legtovább?",
-		"desc": "A nagy képernyőn felvillan egy színsorozat. Ismételd meg pontosan a telefonodon! A sorozat minden körben eggyel hosszabb, és aki hibázik, kiesik. Aki eljut 10 színig, holtversenyben nyer.",
+		"desc": "A nagy képernyőn felvillan egy színsorozat – rögtön 5 színnel kezdünk. Ismételd meg pontosan a telefonodon! A sorozat minden körben eggyel hosszabb, és aki hibázik, kiesik. A legtovább bíró nyer.",
 		"controls": "Figyeld a képernyőt, aztán nyomd meg a színes gombokat ugyanabban a sorrendben."}
 
 
@@ -34,7 +36,9 @@ func layout(_p) -> Dictionary:
 
 
 func _ready() -> void:
-	seq = [randi() % 4, randi() % 4, randi() % 4]
+	seq = []
+	for i in START_LEN:
+		seq.append(randi() % 4)
 	for p in players:
 		alive[p.pid] = true
 		st[p.pid] = {"idx": 0, "done": false, "failed": false, "best": 0, "total": 0.0, "bot_t": 0.0}
@@ -73,7 +77,7 @@ func input(p, msg: Dictionary) -> void:
 	var v := int(msg.get("v", -1))
 	if v == seq[s.idx]:
 		s.idx += 1
-		Audio.pad_soft(v)
+		Audio.play("pop")      # nem a szín hangja: az elárulná a többieknek a megoldást
 		flash[p.pid] = {"v": v, "t": t}
 		if s.idx == seq.size():
 			s.done = true
@@ -215,7 +219,7 @@ func draw(c: CanvasItem) -> void:
 			var len := seq.size()
 			var w: float = min(gap - 16, len * 12.0)
 			for k in len:
-				var col := Color(PADS[seq[k]].color) if k < s.idx else Color(1, 1, 1, 0.2)
+				var col := Color("#e9e4ff") if k < s.idx else Color(1, 1, 1, 0.2)
 				c.draw_circle(Vector2(x - w / 2 + (k + 0.5) * (w / len), 618), min(5.0, w / len / 2 - 0.5), col)
 			if s.done:
 				D.text(c, "✔", x + 26, 518, {"size": 24, "color": Color("#69db7c"), "stroke": Color.BLACK, "sw": 4})

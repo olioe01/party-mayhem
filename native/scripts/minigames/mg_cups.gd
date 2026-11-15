@@ -5,7 +5,7 @@ extends Minigame
 const ROUNDS := 5
 const CUPS := [3, 4, 4, 5, 6]
 const SWAPS := [4, 6, 8, 10, 13]
-const SWAP_DUR := [0.62, 0.5, 0.42, 0.34, 0.27]
+const SWAP_DUR := [0.52, 0.42, 0.35, 0.29, 0.23]
 const GAP := 2.15
 const PICK_LIMIT := 8.0
 const SHOW_T := 2.6

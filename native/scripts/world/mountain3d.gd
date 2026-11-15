@@ -10,6 +10,7 @@ const TYPES := {
 	"P": {"color": "#ef4444", "icon": "−", "emoji": false},
 	"F": {"color": "#22c55e", "icon": "+", "emoji": false},
 	"X": {"color": "#38bdf8", "icon": "❄️", "emoji": true},
+	"S": {"color": "#a855f7", "icon": "🔀", "emoji": true},
 	"G": {"color": "#f59e0b", "icon": "🚧", "emoji": true},
 	"W": {"color": "#ffd43b", "icon": "🏆", "emoji": true},
 }

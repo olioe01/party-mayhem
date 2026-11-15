@@ -198,10 +198,15 @@ func screenshot(path: String) -> void:
 # ------------------------------------------------------------------ részecskék
 func burst(x: float, y: float, o := {}) -> void:
 	var n: int = o.get("n", 20)
+	var fk := 1.0
+	if fx_rect.size.x > 0.0:
+		fk = fx_rect.size.x / 1280.0
+		x = fx_rect.position.x + x * fk
+		y = fx_rect.position.y + y * fk
 	var colors: Array = o.get("colors", ["#ffd43b", "#ff4d6d", "#4dabf7", "#51cf66"])
-	var speed: float = o.get("speed", 320.0)
+	var speed: float = o.get("speed", 320.0) * fk
 	var life: float = o.get("life", 0.9)
-	var size: float = o.get("size", 7.0)
+	var size: float = o.get("size", 7.0) * fk
 	var spread: float = o.get("spread", TAU)
 	var angle: float = o.get("angle", -PI / 2)
 	for i in n:
@@ -212,7 +217,16 @@ func burst(x: float, y: float, o := {}) -> void:
 			"g": o.get("gravity", 700.0), "drag": o.get("drag", 0.6), "rot": FX.f() * 6.0, "vr": FX.fr(-10, 10)})
 
 
+## Ha nem üres: a részecskék 1280×720-as koordinátái ebbe a téglalapba kerülnek (próbakör kis képernyője).
+var fx_rect := Rect2()
+
+
 func float_text(x: float, y: float, s: String, color := Color.WHITE, size := 34) -> void:
+	if fx_rect.size.x > 0.0:
+		var fk := fx_rect.size.x / 1280.0
+		x = fx_rect.position.x + x * fk
+		y = fx_rect.position.y + y * fk
+		size = int(size * max(fk, 0.6))
 	particles.append({"x": x, "y": y, "vx": 0.0, "vy": -70.0, "life": 1.4, "max": 1.4, "size": size, "color": color,
 		"shape": "text", "text": s, "g": 0.0, "drag": 0.0, "rot": 0.0, "vr": 0.0})
 

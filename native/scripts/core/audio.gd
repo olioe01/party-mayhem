@@ -6,6 +6,8 @@ var _players := {}
 var _music_a: AudioStreamPlayer
 var _music_b: AudioStreamPlayer
 var _music_name := ""
+var _music_cur: AudioStreamPlayer = null   # amelyik lejátszón a mostani zene szól
+var _music_tw := {}                        # lejátszó -> a futó hangerő-tween
 var muted := false
 var quiet := false      # online felzárkózás közben nem szólnak az effektek
 var _noise := PackedFloat32Array()
@@ -47,15 +49,32 @@ func toggle_mute() -> bool:
 
 
 # ------------------------------------------------------------------ zene
+## Új hangerő-tween egy zenelejátszóra; az előzőt leállítja, hogy ne dolgozzanak egymás ellen.
+func _music_tween(p: AudioStreamPlayer) -> Tween:
+	var old: Tween = _music_tw.get(p)
+	if old and old.is_valid():
+		old.kill()
+	var tw := create_tween()
+	_music_tw[p] = tw
+	return tw
+
+
 func music(name: String, fade := 0.8) -> void:
 	if name == _music_name:
 		return
 	_music_name = name
 	var path := "res://music/%s.wav" % name
-	var old := _music_a if _music_a.playing else null
+	var old := _music_cur
 	var nxt := _music_b if old == _music_a else _music_a
-	if old:
-		var tw := create_tween()
+	# a másik lejátszón még szólhat egy korábbi váltás kifutó zenéje: azt azonnal leállítjuk,
+	# különben két zene szólna egyszerre
+	var prev: Tween = _music_tw.get(nxt)
+	if prev and prev.is_valid():
+		prev.kill()
+	nxt.stop()
+	_music_cur = null
+	if old and old.playing:
+		var tw := _music_tween(old)
 		tw.tween_property(old, "volume_db", -40.0, fade)
 		tw.tween_callback(old.stop)
 	if name == "" or not ResourceLoader.exists(path):
@@ -63,7 +82,8 @@ func music(name: String, fade := 0.8) -> void:
 	nxt.stream = load(path)
 	nxt.volume_db = -30.0
 	nxt.play()
-	create_tween().tween_property(nxt, "volume_db", 0.0, fade * 0.7)
+	_music_tween(nxt).tween_property(nxt, "volume_db", 0.0, fade * 0.7)
+	_music_cur = nxt
 
 
 func jingle(name: String) -> void:
@@ -77,12 +97,12 @@ func jingle(name: String) -> void:
 	add_child(p)
 	p.play()
 	p.finished.connect(p.queue_free)
-	for m in [_music_a, _music_b]:
-		if m.playing:
-			var tw := create_tween()
-			tw.tween_property(m, "volume_db", -18.0, 0.2)
-			tw.tween_interval(max(0.5, p.stream.get_length() - 0.6))
-			tw.tween_property(m, "volume_db", 0.0, 0.8)
+	var m := _music_cur
+	if m and m.playing:
+		var tw := _music_tween(m)
+		tw.tween_property(m, "volume_db", -18.0, 0.2)
+		tw.tween_interval(max(0.5, p.stream.get_length() - 0.6))
+		tw.tween_property(m, "volume_db", 0.0, 0.8)
 
 
 # ------------------------------------------------------------------ effektek

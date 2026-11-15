@@ -30,6 +30,10 @@ const GAMES := [
 	preload("res://scripts/minigames/mg_fishing.gd"),
 	preload("res://scripts/minigames/mg_flash.gd"),
 	preload("res://scripts/minigames/mg_rhythm.gd"),
+	preload("res://scripts/minigames/mg_mole.gd"),
+	preload("res://scripts/minigames/mg_stairs.gd"),
+	preload("res://scripts/minigames/mg_barrel.gd"),
+	preload("res://scripts/minigames/mg_storm.gd"),
 ]
 
 static var _metas := {}
@@ -115,14 +119,24 @@ class SelectScene:
 		G.team_split = split.teams
 		var metas := MgFlow.all_metas()
 		var mode: String = split.mode
-		var pool: Array = metas.filter(func(m): return m.modes.has(mode) and not G.recent_mg.has(m.id))
-		if pool.is_empty():
-			pool = metas.filter(func(m): return m.modes.has(mode))
-		if pool.is_empty():
+		# a "max_players" kulcsú játékok (pl. Lépcsőverseny) csak legfeljebb ennyi játékossal kerülnek sorra
+		var np := G.players.size()
+		metas = metas.filter(func(m): return np <= int(m.get("max_players", 99)))
+		var of_mode: Array = metas.filter(func(m): return m.modes.has(mode))
+		if of_mode.is_empty():
 			mode = "ffa"
 			split.mode = "ffa"
 			G.team_split = []
-			pool = metas.filter(func(m): return m.modes.has("ffa"))
+			of_mode = metas.filter(func(m): return m.modes.has("ffa"))
+		# egy minijáték addig nem jön újra, amíg az összes (ebben a felállásban játszható) sorra nem került
+		var pool: Array = of_mode.filter(func(m): return not G.recent_mg.has(m.id))
+		if pool.is_empty():
+			var last = G.recent_mg.back() if G.recent_mg.size() else ""
+			for m in of_mode:
+				G.recent_mg.erase(m.id)
+			pool = of_mode.filter(func(m): return m.id != last)     # az új kör ne az előzővel kezdődjön
+			if pool.is_empty():
+				pool = of_mode
 		choice = pool.pick_random()
 		if force != "":
 			var f = MgFlow.find(force)
@@ -140,16 +154,25 @@ class SelectScene:
 						for i in sh.size():
 							split.colors[sh[i].pid] = 1 if i < cut else 0
 						G.team_split = split.teams
+		G.recent_mg.erase(choice.id)
 		G.recent_mg.append(choice.id)
-		while G.recent_mg.size() > min(6, metas.size() - 1):
-			G.recent_mg.pop_front()
-		var ffa_list: Array = metas.filter(func(m): return m.modes.has(split.mode))
-		if ffa_list.is_empty(): ffa_list = metas
-		for i in 26:
-			strip.append(ffa_list[i % ffa_list.size()])
-		strip.append(choice)
-		for i in 3:
-			strip.append(ffa_list[(i + 2) % ffa_list.size()])
+		# a szalagon a látszat kedvéért minden minijáték ott van (a már lejátszottak és a most nem játszhatók is)
+		var ffa_list: Array = MgFlow.all_metas()
+		# a pörgő szalag összevissza sorrendű (a már lejátszott játékok is rajta vannak),
+		# így a sorsolás véletlennek látszik, pedig a nyertes már megvan
+		var prev_id := ""
+		for i in 30:
+			if i == target:
+				strip.append(choice)
+				prev_id = choice.id
+				continue
+			var m: Dictionary = ffa_list.pick_random()
+			for k in 8:
+				if m.id != prev_id and not (i == target - 1 and m.id == choice.id):
+					break
+				m = ffa_list.pick_random()
+			prev_id = m.id
+			strip.append(m)
 		for p in G.players:
 			Net.set_ctrl(p.pid, {"mode": "wait", "icon": "🎰", "title": "Minijáték sorsolás…", "text": "Nézd a nagy képernyőt!"})
 		Main.I.world_env.environment = null
@@ -228,23 +251,64 @@ class SelectScene:
 		D.text(c, sub, 640, 580, {"size": 46, "stroke": D.DARK, "sw": 8})
 
 
-# ------------------------------------------------------------------ leírás
+# ------------------------------------------------------------------ leírás + próbakör
 class IntroScene:
 	extends GameScene
+	## A játék ismertetője. Jobb oldalt egy kisebb képernyőn próbakör fut: a telefonokon már a játék
+	## vezérlője van (fölötte a „Kész vagyok” sáv), így tét nélkül ki lehet próbálni. A próbakör
+	## eredménye nem számít; ha véget ér, újraindul.
+	const PV := Rect2(612, 150, 640, 360)
+
 	var mg: Dictionary
 	var teams: Array
 	var ready_set := {}
-	var limit := 30.0
+	var limit := 60.0
 	var started := false
+	var inst: Minigame
+	var vp: SubViewport
+	var pv_canvas: Control
+	var pv_phase := "wait"     # wait -> play -> over -> (újra)
+	var pv_round := 0
 
 	func _init(m := {}, tm := []) -> void:
 		mg = m
 		teams = tm
 
 	func enter() -> void:
+		Net.practice = true
+		Net.practice_done = {}
+		Main.I.fx_rect = PV
+		vp = SubViewport.new()
+		vp.size = Vector2i(1280, 720)
+		vp.own_world_3d = true
+		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		add_child(vp)
+		pv_canvas = Control.new()
+		pv_canvas.size = Vector2(1280, 720)
+		pv_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vp.add_child(pv_canvas)
+		pv_canvas.draw.connect(_pv_draw)
 		for p in G.players:
-			Net.set_ctrl(p.pid, {"mode": "ready", "icon": mg.icon, "title": mg.name, "text": _controls_for(p)})
+			Net.set_ctrl(p.pid, {"mode": "wait", "icon": mg.icon, "title": mg.name, "text": _controls_for(p)})
+		_spawn(2.2)
+		# a gépi játékosok pár másodperc múlva készek
+		var k := 0
+		for p in G.players:
+			if Net.is_auto(p.pid):
+				var pid: String = p.pid
+				after(3.0 + k * 0.5 + randf() * 1.5, func(): _ready_up(pid))
+				k += 1
 		after(limit, go)
+
+	func exit() -> void:
+		Net.practice = false
+		Net.practice_done = {}
+		Main.I.fx_rect = Rect2()
+		if vp:
+			vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		if inst:
+			inst.queue_free()
+			inst = null
 
 	func _controls_for(p) -> String:
 		var s: String = mg.controls
@@ -253,13 +317,75 @@ class IntroScene:
 			s = "Te a %s csapatban vagy! %s" % [MgFlow.TEAM_NAMES[tix], s]
 		return s
 
-	func input(pid: String, msg: Dictionary) -> void:
-		if str(msg.get("t", "")) != "ready" or ready_set.has(pid) or G.by_pid(pid) == null:
+	## Új próbakör: friss példány a kis képernyőn, rövid szünet után indul.
+	func _spawn(delay: float) -> void:
+		if started:
+			return
+		if inst:
+			vp.remove_child(inst)
+			inst.queue_free()
+		pv_round += 1
+		print_verbose("[mg] próbakör %d: %s" % [pv_round, mg.id])
+		inst = mg.script.new()
+		inst.preview = true
+		inst.setup(G.players.duplicate(), teams)
+		vp.add_child(inst)
+		vp.move_child(inst, 0)
+		if inst.cam and inst.env:
+			inst.cam.environment = inst.env
+		pv_phase = "wait"
+		after(delay, _pv_start)
+
+	func _pv_start() -> void:
+		if started or pv_phase != "wait":
+			return
+		pv_phase = "play"
+		for p in inst.players:
+			Net.set_ctrl(p.pid, inst.layout(p))
+		inst.start()
+
+	func update(dt: float) -> void:
+		if started or inst == null:
+			return
+		if pv_phase == "play":
+			for p in inst.players:
+				if Net.is_auto(p.pid):
+					inst.bot(p, dt)
+			inst.t += dt
+			inst.update(dt)
+			if inst.finished:
+				pv_phase = "over"
+				for p in inst.players:
+					Net.set_ctrl(p.pid, {"mode": "wait", "icon": "🔁", "title": "Próbakör vége", "text": "Mindjárt újraindul – vagy nyomd meg a „Kész” gombot!"})
+				after(2.2, func(): _spawn(1.0))
+		else:
+			inst.idle(dt)
+		pv_canvas.queue_redraw()
+
+	func _pv_draw() -> void:
+		if inst and is_instance_valid(inst):
+			inst.draw(pv_canvas)
+
+	func _ready_up(pid: String) -> void:
+		if ready_set.has(pid) or G.by_pid(pid) == null or started:
 			return
 		ready_set[pid] = true
 		Audio.play("pop")
-		Net.set_ctrl(pid, {"mode": "wait", "icon": "✅", "title": "Kész vagy!", "text": "Várakozás a többiekre…"})
+		Net.practice_done[pid] = true
+		if Net.layouts.has(pid):
+			Net.layouts[pid]["pdone"] = true
+			Net.resend_layout(pid)
 		_check()
+
+	func input(pid: String, msg: Dictionary) -> void:
+		if str(msg.get("t", "")) == "ready":
+			_ready_up(pid)
+			return
+		if pv_phase != "play" or started or inst == null:
+			return
+		var p = G.by_pid(pid)
+		if p and inst.players.has(p):
+			inst.input(p, msg)
 
 	func players_changed() -> void:
 		_check()
@@ -282,18 +408,26 @@ class IntroScene:
 
 	func draw(c: CanvasItem) -> void:
 		MgFlow.bg(c)
-		var s := D.ease_out_back(min(1.0, t * 2.5))
 		var col := Color(mg.color)
-		c.draw_set_transform(Vector2(640, 300), 0, Vector2(s, s))
-		D.panel(c, -470, -250, 940, 470, {"fill": Color(0.08, 0.05, 0.19, 0.92), "stroke": col, "lw": 6, "r": 32})
-		D.emoji(c, mg.icon, -340, -150, 110)
-		D.text(c, mg.name, -250, -170, {"size": 58, "align": "left", "color": col, "stroke": D.DARK, "sw": 8, "maxw": 680})
-		D.text(c, mg.tagline, -250, -115, {"size": 24, "align": "left", "color": Color("#cfc6f5")})
-		D.wrap(c, mg.desc, -420, -45, 840, 30, {"size": 25})
-		D.panel(c, -420, 80, 840, 110, {"fill": Color(1, 1, 1, 0.08), "stroke": null, "r": 20, "shadow": false})
-		D.text(c, "📱 Irányítás", -395, 108, {"size": 22, "align": "left", "color": Color("#ffd43b")})
-		D.wrap(c, mg.controls, -395, 145, 790, 28, {"size": 22})
-		c.draw_set_transform(Vector2.ZERO)
+		var s := D.ease_out_back(min(1.0, t * 2.5))
+		D.emoji(c, mg.icon, 76, 64, 78 * s)
+		D.text(c, mg.name, 130, 50, {"size": 50, "align": "left", "color": col, "stroke": D.DARK, "sw": 8, "maxw": 700})
+		D.text(c, mg.tagline, 132, 96, {"size": 22, "align": "left", "color": Color("#cfc6f5")})
+		# bal oldal: leírás + irányítás
+		D.panel(c, 28, 130, 560, 400, {"fill": Color(0.08, 0.05, 0.19, 0.92), "stroke": col, "lw": 5, "r": 26})
+		var y2: float = D.wrap(c, mg.desc, 50, 164, 516, 26, {"size": 20})
+		var cy: float = max(y2 + 4.0, 372.0)
+		D.panel(c, 44, cy, 528, 520 - cy, {"fill": Color(1, 1, 1, 0.08), "stroke": null, "r": 18, "shadow": false})
+		D.text(c, "📱 Irányítás", 62, cy + 24, {"size": 20, "align": "left", "color": Color("#ffd43b")})
+		D.wrap(c, mg.controls, 62, cy + 54, 492, 24, {"size": 18})
+		# jobb oldal: a próbakör kis képernyője
+		D.text(c, "🎮 PRÓBAKÖR – próbáld ki a telefonodon! (nem számít bele)", PV.position.x + PV.size.x / 2, 128, {"size": 19, "color": Color("#ffe066"), "maxw": PV.size.x})
+		D.panel(c, PV.position.x - 8, PV.position.y - 8, PV.size.x + 16, PV.size.y + 16, {"fill": Color("#0a0618"), "stroke": col, "lw": 6, "r": 18})
+		if vp:
+			c.draw_texture_rect(vp.get_texture(), PV, false)
+		if pv_phase != "play":
+			c.draw_rect(PV, Color(0.04, 0.02, 0.12, 0.5))
+			D.text(c, "Próbakör indul…" if pv_phase == "wait" else "Próbakör vége – újraindul…", PV.position.x + PV.size.x / 2, PV.position.y + PV.size.y / 2, {"size": 30, "stroke": D.DARK, "sw": 7})
 		var n := G.players.size()
 		var gap: float = min(130.0, 1150.0 / n)
 		for i in n:
@@ -302,12 +436,106 @@ class IntroScene:
 			var r: bool = ready_set.has(p.pid)
 			if teams.size() == 2:
 				var tix := 0 if teams[0].has(p) else 1
-				D.ring(c, x, 600, 38, MgFlow.TEAM_COLORS[tix], 6)
-			D.avatar(c, p, x, 600 - (abs(sin(Main.I.time * 5.0 + i)) * 8 if r else 0.0), 30, {"alpha": 1.0 if r else 0.5})
-			D.text(c, "✔" if r else "…", x + 26, 578, {"size": 26, "color": Color("#69db7c") if r else Color("#aaaaaa"), "stroke": D.DARK, "sw": 5})
-			D.text(c, p.name, x, 652, {"size": 17, "maxw": gap - 8})
+				D.ring(c, x, 606, 38, MgFlow.TEAM_COLORS[tix], 6)
+			D.avatar(c, p, x, 606 - (abs(sin(Main.I.time * 5.0 + i)) * 8 if r else 0.0), 30, {"alpha": 1.0 if r else 0.5})
+			D.text(c, "✔" if r else "…", x + 26, 584, {"size": 26, "color": Color("#69db7c") if r else Color("#aaaaaa"), "stroke": D.DARK, "sw": 5})
+			D.text(c, p.name, x, 656, {"size": 17, "maxw": gap - 8})
 		var left: int = max(0, ceili(limit - t))
-		D.text(c, "Nyomd meg a telefonodon a „Kész” gombot!  (automatikus indulás: %d mp)" % left, 640, 695, {"size": 18, "color": Color("#b8acec")})
+		D.text(c, "Ha kigyakoroltad, nyomd meg a telefonodon a „Kész vagyok” sávot!  (automatikus indulás: %d mp)" % left, 640, 697, {"size": 18, "color": Color("#b8acec")})
+
+
+# ------------------------------------------------------------------ tesztfelület (a lobbiból)
+class TestScene:
+	extends GameScene
+	## Minijáték-teszt: a lobbiból nyílik, bármelyik minijáték kipróbálható belőle.
+	## Az így indított játék nem ad jutalmat, a végén ide tér vissza.
+	const COLS := 7
+	var leaving := false
+
+	func enter() -> void:
+		G.mg_test = true
+		G.phase = "mg"
+		G.team_split = []
+		Audio.music("mg_select")
+		Main.I.world_env.environment = null
+		var metas := MgFlow.all_metas()
+		var opts: Array = [{"label": "⬅️ Vissza a lobbiba"}]
+		for m in metas:
+			opts.append({"label": "%s %s" % [m.icon, m.name]})
+		for p in G.players:
+			if p.pid == G.vip and not Net.is_auto(p.pid):
+				Net.set_ctrl(p.pid, {"mode": "choice", "title": "🧪 Minijáték teszt", "text": "Melyiket próbáljuk ki?", "options": opts})
+			else:
+				Net.set_ctrl(p.pid, {"mode": "wait", "icon": "🧪", "title": "Minijáték teszt", "text": "A ⭐ VIP választ minijátékot…"})
+		if Game.mgtest_auto:
+			# gépi végigjátszás (--mgtest): sorban minden minijáték
+			after(1.0, func():
+				var id: String = metas[Game.mgtest_i % metas.size()].id
+				Game.mgtest_i += 1
+				pick(id))
+
+	func input(pid: String, msg: Dictionary) -> void:
+		if pid != G.vip or str(msg.get("t", "")) != "choice":
+			return
+		var v := int(msg.get("v", -1))
+		var metas := MgFlow.all_metas()
+		if v == 0:
+			back()
+		elif v >= 1 and v <= metas.size():
+			pick(metas[v - 1].id)
+
+	func key(e: InputEventKey) -> void:
+		if e.keycode == KEY_ESCAPE or e.keycode == KEY_BACKSPACE or e.keycode == KEY_T:
+			back()
+
+	func back() -> void:
+		if leaving:
+			return
+		leaving = true
+		Audio.play("select")
+		Game.go_lobby()
+
+	func pick(id: String) -> void:
+		var m = MgFlow.find(id)
+		if leaving or m == null or G.players.is_empty():
+			return
+		leaving = true
+		print_verbose("[mg] teszt: %s" % id)
+		Audio.play("fanfare")
+		var teams: Array = []
+		if not m.modes.has("ffa"):
+			var sh: Array = G.players.duplicate()
+			sh.shuffle()
+			var cut: int = 1 if (m.modes[0] == "1v3" or sh.size() < 4) else sh.size() / 2
+			teams = [sh.slice(cut), sh.slice(0, cut)]
+		G.team_split = teams
+		Main.I.set_scene(MgFlow.IntroScene.new(m, teams))
+
+	func draw(c: CanvasItem) -> void:
+		MgFlow.bg(c, 200)
+		D.text(c, "🧪 MINIJÁTÉK TESZT", 640, 52, {"size": 46, "stroke": D.DARK, "sw": 10, "color": Color("#ffd43b")})
+		D.text(c, "Kattints egy minijátékra (vagy a ⭐ VIP válasszon a telefonján). Itt nincs tét: nem jár érte érme.", 640, 98, {"size": 19, "color": Color("#cfc6f5")})
+		var metas := MgFlow.all_metas()
+		var rows := int(ceil(metas.size() / float(COLS)))
+		var w := 168.0
+		var h: float = min(128.0, 500.0 / max(1, rows))
+		var mouse: Vector2 = c.get_local_mouse_position()
+		for i in metas.size():
+			var m: Dictionary = metas[i]
+			var x := 640.0 + (i % COLS - (COLS - 1) / 2.0) * (w + 8) - w / 2
+			var y := 126.0 + (i / COLS) * (h + 8)
+			var rect := Rect2(x, y, w, h)
+			var hover := rect.has_point(mouse)
+			var col := Color(m.color)
+			D.panel(c, x, y - (3 if hover else 0), w, h, {"fill": D.shade(col, -0.3 if hover else -0.5), "stroke": Color("#ffd43b") if hover else col, "lw": 4, "r": 18})
+			D.emoji(c, m.icon, x + w / 2, y + h * 0.36 - (3 if hover else 0), h * 0.42)
+			D.text(c, m.name, x + w / 2, y + h * 0.78 - (3 if hover else 0), {"size": 16, "maxw": w - 12})
+			if G.players.size() > int(m.get("max_players", 99)):
+				D.text(c, "max. %d fő" % int(m.max_players), x + w - 8, y + 14, {"size": 12, "align": "right", "color": Color("#ffe066")})
+			var mid: String = m.id
+			buttons.append({"rect": rect, "fn": func(): pick(mid)})
+		button(c, 40, 656, 250, 48, "⬅ Vissza a lobbiba", back, {"color": Color("#868e96"), "text_color": Color.WHITE, "size": 20})
+		D.text(c, "%d játékos · %d minijáték" % [G.players.size(), metas.size()], 1240, 682, {"size": 18, "align": "right", "color": Color("#b8acec")})
 
 
 # ------------------------------------------------------------------ játék
@@ -413,6 +641,12 @@ class ResultScene:
 	var rows: Array = []
 	var done := false
 	var team_win := -2     # -2: nem csapatos, -1: döntetlen
+	var stage := "result"  # "tie": holtverseny van, előbb kockadobás dönt a helyezésekről
+	var tie: Array = []    # [{row, roll}]: akik épp dobnak (roll 0 = még nem dobott)
+	var tie_round := 0
+	var tie_t0 := 0.0
+	var tie_closing := false
+	var res_t0 := 0.0
 
 	func _init(m := {}, r := [], tm := []) -> void:
 		mg = m
@@ -423,15 +657,22 @@ class ResultScene:
 		Main.I.world_env.environment = null
 		if teams.size() == 2:
 			_team_result()
-		else:
-			_ffa_result()
+			_celebrate()
+			return
+		_ffa_rows()
+		if not _tie_start():
+			_ffa_finish()
+			_celebrate()
+
+	func _celebrate() -> void:
+		res_t0 = t
 		after(0.3, func():
 			Audio.play("fanfare")
 			Audio.jingle("victory")
 			Main.I.confetti(90))
 		after(3.5 + rows.size() * 0.35, next)
 
-	func _ffa_result() -> void:
+	func _ffa_rows() -> void:
 		var place := 0
 		for i in ranking.size():
 			var r: Dictionary = ranking[i]
@@ -440,13 +681,91 @@ class ResultScene:
 			var p = G.by_pid(r.pid)
 			if p == null:
 				continue
-			var award: int = MgFlow.AWARDS[place] if place < MgFlow.AWARDS.size() else 0
-			rows.append({"p": p, "place": place, "award": award, "label": r.label})
-		if G.is_mountain():
+			rows.append({"p": p, "place": place, "award": 0, "label": r.label, "ord": i})
+
+	func _ffa_finish() -> void:
+		for row in rows:
+			row.award = MgFlow.AWARDS[row.place] if row.place < MgFlow.AWARDS.size() else 0
+		if G.is_mountain() and not G.mg_test:
 			_mountain_dice()
 			return
 		for row in rows:
 			_give(row)
+
+	## Holtverseny: akik ugyanazt a helyezést érték el, szabályos kockával dobnak, a nagyobb dobás
+	## kapja a jobb helyet. Igaz, ha van kinek dobnia.
+	func _tie_start() -> bool:
+		var count := {}
+		for row in rows:
+			count[row.place] = count.get(row.place, 0) + 1
+		tie = []
+		for row in rows:
+			if count[row.place] > 1:
+				tie.append({"row": row, "roll": 0})
+		if tie.is_empty():
+			return false
+		stage = "tie"
+		tie_round += 1
+		print_verbose("[mg] holtverseny (%d. dobás): %s" % [tie_round, ", ".join(tie.map(func(e): return "%s a %d. helyért" % [e.row.p.name, e.row.place + 1]))])
+		tie_t0 = t
+		tie_closing = false
+		Audio.play("bell")
+		for p in G.players:
+			Net.set_ctrl(p.pid, {"mode": "wait", "icon": "🎲", "title": "Holtverseny!", "text": "Kockadobás dönt a helyezésről."})
+		for e in tie:
+			Net.set_ctrl(e.row.p.pid, {"mode": "tap", "label": "🎲 DOBJ!", "hint": "Holtverseny! A nagyobb dobás kapja a jobb helyezést."})
+		return true
+
+	func _tie_roll(e: Dictionary) -> void:
+		e.roll = randi_range(1, 6)
+		Audio.play("hit")
+		var p = e.row.p
+		Net.vibrate(p.pid, 80)
+		Net.set_ctrl(p.pid, {"mode": "wait", "icon": "🎲", "title": "Dobásod: %d" % e.roll, "text": "Figyeld a képernyőt!"})
+		for o in tie:
+			if o.roll == 0:
+				return
+		tie_closing = true
+		after(1.8, _tie_resolve)
+
+	func _tie_resolve() -> void:
+		var groups := {}
+		for e in tie:
+			if not groups.has(e.row.place):
+				groups[e.row.place] = []
+			groups[e.row.place].append(e)
+		for base in groups:
+			var g: Array = groups[base]
+			for e in g:
+				var better := 0
+				for o in g:
+					if o.roll > e.roll:
+						better += 1
+				e.row.place = int(base) + better
+		rows.sort_custom(func(a, b): return a.place < b.place if a.place != b.place else a.ord < b.ord)
+		# akik ugyanannyit dobtak, újra dobnak
+		if not _tie_start():
+			stage = "result"
+			_ffa_finish()
+			_celebrate()
+
+	func update(_dt: float) -> void:
+		if stage != "tie" or tie_closing:
+			return
+		var el := t - tie_t0
+		for i in tie.size():
+			var e: Dictionary = tie[i]
+			if e.roll == 0 and ((Net.is_auto(e.row.p.pid) and el > 1.0 + i * 0.35) or el > 12.0):
+				_tie_roll(e)
+				return
+
+	func input(pid: String, msg: Dictionary) -> void:
+		if stage != "tie" or tie_closing or str(msg.get("t", "")) != "tap":
+			return
+		for e in tie:
+			if e.row.p.pid == pid and e.roll == 0:
+				_tie_roll(e)
+				return
 
 	## Hegymászás: érme helyett a következő dobás kockáit osztja a helyezés.
 	func _mountain_dice() -> void:
@@ -499,6 +818,12 @@ class ResultScene:
 			_give(row)
 
 	func _give(r: Dictionary) -> void:
+		if G.mg_test:
+			# tesztfelület: csak a helyezés látszik, jutalom nincs
+			r.award = 0
+			Net.set_ctrl(r.p.pid, {"mode": "result", "icon": MgFlow.MEDALS[r.place] if r.place < 3 else "🎮",
+				"title": "%d. hely" % (r.place + 1) if team_win == -2 else ("GYŐZELEM!" if r.place == 0 else "Vesztettetek"), "text": "Próbajáték – nem járt érte jutalom."})
+			return
 		G.add_coins(r.p, r.award)
 		r.p.stats.mg_coins += r.award
 		if r.place == 0:
@@ -513,14 +838,42 @@ class ResultScene:
 			next()
 
 	func next() -> void:
+		if stage == "tie":
+			# ENTER: aki még nem dobott, annak most dob a játék
+			for e in tie:
+				if e.roll == 0 and not tie_closing:
+					_tie_roll(e)
+			return
 		if done:
 			return
 		done = true
 		Game.after_minigame()
 
+	func _draw_tie(c: CanvasItem) -> void:
+		D.text(c, "🎲 HOLTVERSENY!", 640, 160, {"size": 60, "color": Color("#ffd43b"), "stroke": D.DARK, "sw": 10})
+		D.text(c, "Megint egyforma – újra dobnak!" if tie_round > 1 else "A kocka dönt: a nagyobb dobás kapja a jobb helyezést", 640, 215, {"size": 24, "color": Color("#cfc6f5")})
+		var n := tie.size()
+		var gap: float = min(230.0, 1150.0 / n)
+		for i in n:
+			var e: Dictionary = tie[i]
+			var p = e.row.p
+			var x := 640 + (i - (n - 1) / 2.0) * gap
+			var rolled: bool = e.roll > 0
+			D.text(c, "a %d. helyért" % (e.row.place + 1), x, 280, {"size": 20, "color": Color("#ffd43b")})
+			D.avatar(c, p, x, 350 - (0.0 if rolled else abs(sin(Main.I.time * 5.0 + i)) * 8), 46)
+			D.text(c, p.name, x, 418, {"size": 22, "maxw": gap - 12})
+			var v: int = e.roll if rolled else int(Main.I.time * 14.0 + i * 3) % 6 + 1
+			D.panel(c, x - 50, 450, 100, 100, {"fill": Color.WHITE if rolled else Color(1, 1, 1, 0.6), "stroke": p.color, "lw": 6, "r": 20})
+			D.text(c, str(v), x, 502, {"size": 64, "color": Color("#2b1055")})
+			if not rolled:
+				D.text(c, "dobj a telefonodon!", x, 580, {"size": 16, "color": Color("#b8acec")})
+
 	func draw(c: CanvasItem) -> void:
 		MgFlow.bg(c, 200)
 		D.text(c, "%s %s" % [mg.icon, mg.name], 640, 70, {"size": 46, "color": Color(mg.color), "stroke": D.DARK, "sw": 8})
+		if stage == "tie":
+			_draw_tie(c)
+			return
 		if team_win >= 0:
 			D.text(c, "%s CSAPAT NYERT!" % MgFlow.TEAM_NAMES[team_win], 640, 122, {"size": 32, "color": MgFlow.TEAM_COLORS[team_win].lightened(0.35), "stroke": D.DARK, "sw": 6})
 		elif team_win == -1:
@@ -533,7 +886,7 @@ class ResultScene:
 		var row_h: float = min(70.0, 520.0 / max(1, n))
 		for i in n:
 			var r: Dictionary = rows[i]
-			var appear: float = clamp((t - 0.3 - i * 0.3) * 3.0, 0.0, 1.0)
+			var appear: float = clamp((t - res_t0 - 0.3 - i * 0.3) * 3.0, 0.0, 1.0)
 			if appear <= 0:
 				continue
 			var y := 160.0 + i * (row_h + 6)

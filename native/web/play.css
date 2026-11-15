@@ -123,6 +123,8 @@ input#name:focus { border-color: #ffd43b; }
 
 /* színes párnák */
 .pads { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; }
+.pads.row { grid-template-columns: repeat(4, 1fr); grid-template-rows: 1fr; gap: 8px; }
+.pads.row .pad { font-size: 44px; border-radius: 22px; }
 .pad { border-radius: 26px; font-size: 64px; color: #fff; text-shadow: 0 3px 0 #0004; box-shadow: 0 8px 0 #0006; touch-action: none; }
 .pad.hit { filter: brightness(1.5); transform: translateY(6px); box-shadow: 0 2px 0 #0006; }
 .pads.off .pad { filter: grayscale(.7) brightness(.5); }
@@ -135,6 +137,17 @@ input#name:focus { border-color: #ffd43b; }
 }
 .cup span { font-size: 44px; line-height: 1; }
 .cup.picked { background: var(--pc); border-color: #fff; transform: translateY(4px); box-shadow: 0 2px 0 #0005; }
+
+/* próbakör-sáv és tesztgomb */
+.pbar { flex: 0 0 auto; padding: 12px 10px; font-size: 18px; font-weight: 700; border-radius: 16px; background: #ffd43b; color: #2b1055; box-shadow: 0 4px 0 #c59a00; }
+.pbar.on { background: #2f9e44; color: #fff; box-shadow: none; opacity: .85; font-size: 15px; padding: 8px 10px; }
+.testbtn { padding: 12px; font-size: 17px; font-weight: 700; border-radius: 16px; background: #b197fc; color: #2b1055; box-shadow: 0 4px 0 #6f52c4; }
+
+/* gombrács */
+.gridpad { flex: 1; display: grid; grid-auto-rows: 1fr; gap: 10px; }
+.gcell { border-radius: 24px; font-size: 46px; background: #ffffff1c; border: 3px solid #ffffff30; box-shadow: 0 7px 0 #0006; touch-action: none; }
+.gcell.hit { background: var(--pc); border-color: #fff; transform: translateY(5px); box-shadow: 0 2px 0 #0006; }
+.gnone { border-radius: 24px; border: 3px dashed #ffffff18; }
 
 /* számbillentyűzet */
 .numdisp { font-size: 64px; font-weight: 700; text-align: center; background: #00000040; border-radius: 20px; padding: 6px; min-height: 92px; letter-spacing: 4px; }

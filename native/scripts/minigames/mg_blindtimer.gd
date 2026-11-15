@@ -1,7 +1,9 @@
 extends Minigame
 ## Vak időzítő – az óra eltűnik, neked kell érezni, mikor telt el pontosan X másodperc.
 
-const TARGETS := [10, 7, 13]
+const ROUNDS := 3
+const T_MIN := 5
+const T_MAX := 15
 const VISIBLE := 3.0
 const INTRO := 2.6
 const REVEAL := 5.0
@@ -17,12 +19,13 @@ var target := 10
 var gained := {}
 var bot_at := {}
 var best = null
+var targets: Array = []      # a 3 kör célideje: 5 és 15 mp közötti, egymástól különböző egész számok
 
 
 func meta() -> Dictionary:
 	return {"id": "blindtimer", "name": "Vak időzítő", "icon": "⏱️", "color": "#f59e0b", "modes": ["ffa", "2v2", "1v3"],
-		"tagline": "Mennyi az a 10 másodperc?",
-		"desc": "Elindul egy óra, de 3 másodperc múlva eltűnik! Magadban számolva nyomd meg a gombot pontosan a megadott időnél (10, 7, majd 13 mp). A legpontosabb 3 pontot kap, a második 2-t, a harmadik 1-et. Ha 0,1 mp-en belül vagy, +1 bónusz jár.",
+		"tagline": "Mennyi az a pár másodperc?",
+		"desc": "Elindul egy óra, de 3 másodperc múlva eltűnik! Magadban számolva nyomd meg a gombot pontosan a megadott időnél. Három kör van, a célidő minden körben más: véletlenszerűen 5 és 15 másodperc közötti. A legpontosabb 3 pontot kap, a második 2-t, a harmadik 1-et. Ha 0,1 mp-en belül vagy, +1 bónusz jár.",
 		"controls": "Figyeld az órát, aztán számolj magadban, és nyomd meg a STOP gombot, amikor szerinted letelt az idő. Körönként egyszer nyomhatsz."}
 
 
@@ -34,6 +37,9 @@ func _ready() -> void:
 	for p in players:
 		pts[p.pid] = 0
 		err[p.pid] = 0.0
+	var pool: Array = range(T_MIN, T_MAX + 1)
+	pool.shuffle()
+	targets = pool.slice(0, ROUNDS)
 
 
 func _gauss() -> float:
@@ -46,10 +52,10 @@ func start() -> void:
 
 func _next() -> void:
 	round_i += 1
-	if round_i > TARGETS.size():
+	if round_i > ROUNDS:
 		finished = true
 		return
-	target = TARGETS[round_i - 1]
+	target = targets[round_i - 1]
 	phase = "intro"
 	phase_t = 0.0
 	stops = {}
@@ -101,7 +107,7 @@ func _score_round() -> void:
 		err[p.pid] += abs(stops[p.pid] - target) if stops.has(p.pid) else 5.0
 	best = rows[0].p if rows.size() else null
 	if best:
-		Main.I.burst(640, 300, {"n": 50, "colors": [best.color_hex, "#ffd43b", "#ffffff"], "speed": 480})
+		Main.I.burst(640, 232, {"n": 50, "colors": [best.color_hex, "#ffd43b", "#ffffff"], "speed": 480})
 	Audio.play("coin")
 
 
@@ -157,77 +163,95 @@ func _draw_clock(c: CanvasItem, x: float, y: float, r: float) -> void:
 	c.draw_circle(Vector2(x, y), 10, Color("#2b1a5c"))
 	if run and fade > 0:
 		c.draw_circle(Vector2(x, y), r + 2, Color(Color("#3b1f7a"), fade))
-		D.text(c, "?", x, y + 8, {"size": 170, "color": Color("#ffd43b"), "stroke": D.DARK, "sw": 10, "alpha": fade})
+		D.text(c, "?", x, y + 6, {"size": 130, "color": Color("#ffd43b"), "stroke": D.DARK, "sw": 10, "alpha": fade})
 	if shown:
-		D.text(c, "%.1f" % tt, x, y + r + 50, {"size": 44, "stroke": D.DARK, "sw": 7})
+		D.text(c, "%.1f" % tt, x + r + 70, y, {"size": 44, "stroke": D.DARK, "sw": 7})
 
 
 func draw(c: CanvasItem) -> void:
-	D.vgrad(c, Color("#2a1660"), Color("#0b0622"))
-	D.text(c, "%d. / %d kör" % [clampi(round_i, 1, TARGETS.size()), TARGETS.size()], 100, 36, {"size": 22, "color": Color("#dddddd")})
-	D.panel(c, 390, 14, 500, 70, {"r": 35, "fill": Color(0, 0, 0, 0.45)})
+	_draw_studio(c)
+	D.text(c, "%d. / %d kör" % [clampi(round_i, 1, ROUNDS), ROUNDS], 100, 36, {"size": 22, "color": Color("#dddddd")})
+	D.panel(c, 390, 14, 500, 70, {"r": 35, "fill": Color(0, 0, 0, 0.55), "stroke": Color("#ffd43b"), "lw": 3})
 	D.text(c, "🎯 Állítsd meg pontosan %d mp-nél!" % target, 640, 50, {"size": 30, "maxw": 470})
-	if phase == "reveal":
-		_draw_reveal(c)
-		return
-	_draw_clock(c, 640, 290, 165)
+	_draw_clock(c, 640, 232, 118)
 	if phase == "run" and phase_t >= VISIBLE:
-		D.text(c, "Számolj magadban… 🤫", 640, 515, {"size": 30, "color": Color("#e5dbff")})
+		D.text(c, "Számolj magadban… 🤫", 640, 408, {"size": 28, "color": Color("#e5dbff"), "stroke": D.DARK, "sw": 6})
 	elif phase == "intro":
-		D.text(c, "Az óra 3 mp után eltűnik!", 640, 515, {"size": 28, "color": Color("#e5dbff")})
+		D.text(c, "Az óra 3 mp után eltűnik!", 640, 408, {"size": 26, "color": Color("#e5dbff"), "stroke": D.DARK, "sw": 6})
+	elif phase == "reveal" and best and phase_t > 0.4 + players.size() * 0.22:
+		var pulse := 1.0 + sin(Main.I.time * 6.0) * 0.04
+		c.draw_set_transform(Vector2(640, 408), 0, Vector2(pulse, pulse))
+		D.text(c, "🏅 %s a legpontosabb!" % best.name, 0, 0, {"size": 32, "stroke": D.shade(best.color, -0.6), "sw": 7})
+		c.draw_set_transform(Vector2.ZERO)
+	_draw_desks(c)
+
+
+## Vetélkedő-stúdió: függöny, reflektorok, fényes padló.
+func _draw_studio(c: CanvasItem) -> void:
+	D.vgrad(c, Color("#3b1470"), Color("#12072e"))
+	for i in 17:
+		var x := i * 80.0
+		c.draw_rect(Rect2(x, 0, 40, 560), Color(0, 0, 0, 0.10))
+		c.draw_rect(Rect2(x + 40, 0, 6, 560), Color(1, 1, 1, 0.03))
+	# reflektorfények fentről
+	for k in 4:
+		var sx := 160.0 + k * 320.0
+		var sway := sin(Main.I.time * 0.7 + k * 1.7) * 60.0
+		var cone := PackedVector2Array([Vector2(sx - 14, 0), Vector2(sx + 14, 0), Vector2(sx + sway + 150, 560), Vector2(sx + sway - 150, 560)])
+		c.draw_colored_polygon(cone, Color(1, 0.95, 0.7, 0.05))
+		c.draw_circle(Vector2(sx, 4), 16, Color("#ffe066"))
+	# égősor a színpad peremén
+	for i in 33:
+		var on := (i + int(Main.I.time * 3.0)) % 3 == 0
+		c.draw_circle(Vector2(i * 40.0, 556), 5, Color("#ffd43b") if on else Color("#7a5b12"))
+	D.vgrad(c, Color("#2a1458"), Color("#090416"), 562, 720)
+	c.draw_rect(Rect2(0, 560, 1280, 4), Color("#ffd43b"))
+
+
+## Minden játékos egy pult mögött áll; a pult kijelzője a kör végén megmutatja, mennyinél állította meg.
+func _draw_desks(c: CanvasItem) -> void:
 	var n := players.size()
-	var gap: float = min(150.0, 1180.0 / n)
+	var gap: float = min(190.0, 1220.0 / n)
+	var w: float = gap - 14
+	var reveal := phase == "reveal"
 	for i in n:
 		var p = players[i]
 		var x := 640 + (i - (n - 1) / 2.0) * gap
 		var done: bool = stops.has(p.pid)
+		var shown: bool = reveal and phase_t > 0.3 + i * 0.22
+		var is_best: bool = shown and best == p
 		var tix := team_of(p)
-		if tix >= 0:
-			D.ring(c, x, 600 - (6.0 if done else 0.0), 36, MgFlow.TEAM_COLORS[tix], 5)
-		D.avatar(c, p, x, 600 - (6.0 if done else 0.0), 28, {"alpha": 1.0 if done else 0.7})
-		D.text(c, p.name, x, 644, {"size": 16, "maxw": gap - 6})
-		D.text(c, "✋ STOP" if done else "%d p" % pts[p.pid], x, 672, {"size": 18, "color": Color("#69db7c") if done else Color("#ffd43b")})
-
-
-func _draw_reveal(c: CanvasItem) -> void:
-	var x0 := 140.0
-	var x1 := 1140.0
-	var y := 230.0
-	var span := 3.0
-	for p in players:
-		span = max(span, abs(stops.get(p.pid, float(target)) - target) + 0.5)
-	var k: float = min(1.0, phase_t / 1.2)
-	D.panel(c, x0, y - 8, x1 - x0, 16, {"r": 8, "fill": Color(1, 1, 1, 0.15), "stroke": null, "shadow": false})
-	c.draw_rect(Rect2(638, y - 40, 4, 80), Color("#ffd43b"))
-	D.text(c, "%d.00 mp" % target, 640, y - 58, {"size": 26, "color": Color("#ffd43b")})
-	D.text(c, "◀ korán", x0 + 50, y - 28, {"size": 18, "color": Color("#b8acec")})
-	D.text(c, "későn ▶", x1 - 50, y - 28, {"size": 18, "color": Color("#b8acec")})
-	var rows := players.duplicate()
-	rows.sort_custom(func(a, b): return gained.get(a.pid, -1) > gained.get(b.pid, -1))
-	var n := rows.size()
-	for i in n:
-		var p = rows[i]
-		var has: bool = stops.has(p.pid)
-		if has:
-			var s: float = stops[p.pid]
-			var px := 640 + ((s - target) / span * ((x1 - x0) / 2)) * k
-			c.draw_line(Vector2(px, y), Vector2(px, y + 22 + (i % 3) * 12), p.color, 3)
-			D.avatar(c, p, px, y + 34 + (i % 3) * 12, 13, {"shadow": false})
-		var ry = 330 + i * min(46.0, 340.0 / n)
-		D.panel(c, 300, ry - 20, 680, 40, {"r": 14, "fill": Color(1, 1, 1, 0.07), "stroke": p.color, "shadow": false, "lw": 2})
-		D.avatar(c, p, 326, ry, 15, {"shadow": false})
-		D.text(c, p.name, 352, ry, {"size": 20, "align": "left", "maxw": 220})
-		if not has:
-			D.text(c, "nem nyomott", 700, ry, {"size": 20, "color": Color("#ff8787")})
+		var trim: Color = MgFlow.TEAM_COLORS[tix] if tix >= 0 else p.color
+		# a figura a pult mögött (a pult eltakarja az alját)
+		var bob: float = abs(sin(Main.I.time * 6.0 + i)) * 8.0 if is_best else 0.0
+		D.avatar(c, p, x, 462 - bob, min(44.0, w * 0.36), {"shadow": false})
+		if done and not reveal:
+			D.text(c, "✋", x + min(40.0, w * 0.3), 438, {"size": 26})
+		# pult
+		if is_best:
+			D.panel(c, x - w / 2 - 6, 484, w + 12, 172, {"r": 20, "fill": Color(1, 0.83, 0.23, 0.35), "stroke": null, "shadow": false})
+		D.panel(c, x - w / 2, 490, w, 160, {"r": 16, "fill": D.shade(trim, -0.55), "stroke": trim, "lw": 4})
+		c.draw_rect(Rect2(x - w / 2 + 4, 490, w - 8, 10), D.shade(trim, 0.2))
+		D.text(c, p.name, x, 518, {"size": 17, "maxw": w - 14})
+		# kijelző
+		D.panel(c, x - w / 2 + 10, 536, w - 20, 70, {"r": 10, "fill": Color("#0a0618"), "stroke": Color(1, 1, 1, 0.25), "lw": 2, "shadow": false})
+		if shown:
+			if done:
+				var sv: float = stops[p.pid]
+				var d := sv - target
+				var col := Color("#69db7c") if abs(d) < 0.3 else (Color("#ffd43b") if abs(d) < 1 else Color("#ff8787"))
+				D.text(c, "%.2f" % sv, x, 560, {"size": min(30, int(w * 0.24)), "color": col})
+				D.text(c, "%s%.2f mp" % ["+" if d >= 0 else "−", abs(d)], x, 590, {"size": 15, "color": Color("#cfc6f5")})
+			else:
+				D.text(c, "nem nyomott", x, 571, {"size": 15, "color": Color("#ff8787"), "maxw": w - 26})
+		elif reveal:
+			D.text(c, "?", x, 571, {"size": 34, "color": Color("#ffd43b")})
+		elif done:
+			D.text(c, "STOP", x, 571, {"size": 26, "color": Color("#69db7c")})
 		else:
-			var s: float = stops[p.pid]
-			var d := s - target
-			D.text(c, "%.2f mp" % s, 640, ry, {"size": 22})
-			D.text(c, "%s%.2f" % ["+" if d >= 0 else "−", abs(d)], 790, ry, {"size": 20, "color": Color("#69db7c") if abs(d) < 0.3 else (Color("#ffd43b") if abs(d) < 1 else Color("#ff8787"))})
-		if gained.get(p.pid, 0) > 0:
-			D.text(c, "+%d p" % gained[p.pid], 950, ry, {"size": 22, "color": Color("#ffd43b"), "align": "right"})
-	if best:
-		var pulse := 1.0 + sin(Main.I.time * 6.0) * 0.04
-		c.draw_set_transform(Vector2(640, 125), 0, Vector2(pulse, pulse))
-		D.text(c, "🏅 %s a legpontosabb!" % best.name, 0, 0, {"size": 34, "stroke": D.shade(best.color, -0.6), "sw": 7})
-		c.draw_set_transform(Vector2.ZERO)
+			D.text(c, "– –", x, 571, {"size": 26, "color": Color(1, 1, 1, 0.35)})
+		# a pult alja: pontok
+		if shown and gained.get(p.pid, 0) > 0:
+			D.text(c, "+%d p" % gained[p.pid], x, 628, {"size": 20, "color": Color("#ffd43b")})
+		else:
+			D.text(c, "%d pont" % pts[p.pid], x, 628, {"size": 17, "color": Color("#e5dbff")})

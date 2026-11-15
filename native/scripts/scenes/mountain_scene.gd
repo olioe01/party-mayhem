@@ -1,7 +1,7 @@
 class_name MountainScene
 extends GameScene
 ## Hegymászás: egy kör = minijáték, majd a helyezések sorrendjében dobás a kiosztott kockákkal.
-## Büntető-, hátszél- és jégmezők, három akadály (külön kockával 4-5-6 kell), cél a csúcs.
+## Büntető-, hátszél-, jég- és cseremezők, három egyre nehezebb akadály (külön kockával 4, 5, majd 6 kell), cél a csúcs.
 
 const ML = preload("res://scripts/world/mountain_layout.gd")
 const DIE_COLORS := {6: ["#ffffff", "#5b3fb5"], 4: ["#a5d8ff", "#1c4f8a"], 2: ["#ffd8a8", "#a3470b"]}
@@ -33,6 +33,7 @@ var dice = null              # {p, sides, vals, rolling, next, hit_t}
 var dice_blocks: Array = []  # [{root, cube, labels}]
 var steps_left := 0
 var done := false
+var swap_ui = null           # {p, others, idx, rolling, next}: a cseremező figurás kockája
 
 
 func _init(is_intro := false) -> void:
@@ -115,9 +116,9 @@ func _run() -> void:
 		await toast("🎲 A kockákat a minijáték osztja", "1. hely: 2 kocka · 2.: kocka + 1–4 · 3.: kocka + 1–2 · utolsó: 1 kocka", 4.2)
 		var g0: Dictionary = L.gates[0]
 		m3.cam_node(g0.node, "mid", 1.6)
-		await toast("🚧 3 akadály állja az utat", "Téglafal, ágyús bástya és egy alvó jeti. Mindegyiknél külön kockával dobsz: 4, 5 vagy 6 kell. Ha sikerül, a maradék lépéseiddel mehetsz is tovább, és az út mindenkinek szabad marad.", 6.0)
+		await toast("🚧 3 akadály állja az utat", "Téglafal, ágyús bástya és egy alvó jeti. Mindegyiknél külön kockával dobsz, és egyre nehezebbek: az elsőnél legalább 4, a másodiknál legalább 5, az utolsónál 6 kell. Ha sikerül, a maradék lépéseiddel mehetsz is tovább, és az út mindenkinek szabad marad.", 7.0)
 		m3.cam_overview(1.2)
-		await toast("⬇️ Vigyázz a piros mezőkkel!", "Piros: vissza · zöld: előre · ❄️: kimaradsz egy dobásból", 3.4)
+		await toast("⬇️ Vigyázz a piros mezőkkel!", "Piros: vissza · zöld: előre · ❄️: kimaradsz egy dobásból · 🔀: helyet cserélsz valakivel", 4.0)
 		await toast("🎮 Kezdjük egy minijátékkal!", "A helyezés dönti el, ki milyen kockákkal dob", 2.2)
 		Main.I.set_scene(MgFlow.SelectScene.new())
 		return
@@ -188,19 +189,29 @@ func turn(p) -> void:
 	await sleep(0.5)
 
 
-## Akadály: külön kockával dob, 4-5-6-ra legyőzi. Igaz, ha sikerült (ilyenkor mehet tovább).
+## Mennyi kell az akadály-kockán: "4, 5 vagy 6", "5 vagy 6", "6-os".
+func need_txt(need: int) -> String:
+	match need:
+		6: return "6-os"
+		5: return "5 vagy 6"
+	return "4, 5 vagy 6"
+
+
+## Akadály: külön kockával dob, és legyőzi, ha legalább annyit dob, amennyi az akadályhoz kell.
+## Igaz, ha sikerült (ilyenkor mehet tovább).
 func try_gate(p, g: Dictionary) -> bool:
 	gate_tried = true
 	var info: Dictionary = GATE_INFO[g.kind]
 	m3.cam_side = -0.5     # hátulról, ferdén látszik az akadály és a bábu is
 	m3.cam_node(g.node + 0.3, "close", 3)
-	var sub := "%s külön kockával dob – %s: 4, 5 vagy 6 kell" % [p.name, info.how]
+	var need: int = g.need
+	var sub := "%s külön kockával dob – %s: %s kell" % [p.name, info.how, need_txt(need)]
 	if steps_left > 0:
 		sub += ". Ha sikerül, mehet tovább a maradék %d lépéssel!" % steps_left
 	await toast("%s %s" % [info.icon, info.name], sub, 2.3, p)
-	var v: int = (await roll(p, "4, 5 vagy 6 kell!", [6], true))[0]
+	var v: int = (await roll(p, "%s kell!" % need_txt(need), [6], need))[0]
 	print_verbose("[mtn] akadály-dobás: %s @%d (%s) -> %d" % [p.name, g.node, g.kind, v])
-	if v >= ML.GATE_PASS:
+	if v >= need:
 		await open_gate(g, p)
 		m3.cam_side = 0.16
 		return true
@@ -208,7 +219,7 @@ func try_gate(p, g: Dictionary) -> bool:
 	m3.emote(p.pid, "sad")
 	Audio.play("fail")
 	Net.vibrate(p.pid, [60, 40, 60])
-	await toast("%s %s" % [info.icon, info.fail], "%d lett, pedig 4, 5 vagy 6 kellett. A következő körben újra próbálhatja!" % v, 2.0, p)
+	await toast("%s %s" % [info.icon, info.fail], "%d lett, pedig %s kellett. A következő körben újra próbálhatja!" % [v, need_txt(need)], 2.0, p)
 	m3.cam_side = 0.16
 	return false
 
@@ -218,12 +229,14 @@ func _rag(n: int) -> String:
 	return {1: "et", 2: "t", 3: "at", 4: "et", 5: "öt", 6: "ot", 7: "et", 8: "at", 9: "et", 10: "et", 11: "et", 12: "t"}.get(n, "t")
 
 
-func roll(p, hint: String, sides_in = null, gate := false) -> Array:
+## gate_need > 0: akadály-kocka, ennyit kell legalább dobni.
+func roll(p, hint: String, sides_in = null, gate_need := 0) -> Array:
+	var gate := gate_need > 0
 	m3.cam_follow(p.pid, "close", 3)
 	var sides: Array = sides_in if sides_in != null else p.dice.duplicate()
 	if sides.is_empty():
 		sides = [6]
-	dice = {"p": p, "sides": sides, "vals": [], "rolling": true, "next": 0.0, "hit_t": 0.0, "gate": gate}
+	dice = {"p": p, "sides": sides, "vals": [], "rolling": true, "next": 0.0, "hit_t": 0.0, "gate": gate, "need": gate_need}
 	for i in sides.size():
 		dice.vals.append(1)
 	_dice_randomize()
@@ -245,7 +258,7 @@ func roll(p, hint: String, sides_in = null, gate := false) -> Array:
 	dice.hit_t = t
 	if gate:
 		# zöld, ha sikerült, piros, ha nem
-		var ok: bool = dice.vals[0] >= ML.GATE_PASS
+		var ok: bool = dice.vals[0] >= gate_need
 		_die_color(dice_blocks[0], "#2f9e44" if ok else "#e03131")
 		for l in dice_blocks[0].labels:
 			(l as Label3D).modulate = Color.WHITE
@@ -428,9 +441,59 @@ func land(p) -> void:
 			var q := pawn_xy(p)
 			Main.I.burst(q.x, q.y, {"n": 30, "colors": ["#a5d8ff", "#ffffff", "#74c0fc"], "speed": 260})
 			await toast("❄️ Jégmező!", "%s megfagyott: kimarad a következő dobásából" % p.name, 2.0, p)
+		"S":
+			p.stats.events += 1
+			await swap_roll(p)
 		"G":
 			if closed_gate(p.node) != null and not gate_tried:
 				await _gate_notice(p)
+
+
+## Cseremező: figurás kockával dob (a lapjain a többi játékos van), és helyet cserél azzal, akit kidobott.
+func swap_roll(p) -> void:
+	var others: Array = G.players.filter(func(q): return q != p)
+	if others.is_empty():
+		return
+	Audio.play("sparkle")
+	Net.vibrate(p.pid, [60, 40, 60])
+	await toast("🔀 Cseremező!", "%s a figurás kockával dob: akit kidob, azzal helyet cserél!" % p.name, 2.6, p)
+	swap_ui = {"p": p, "others": others, "idx": 0, "rolling": true, "next": 0.0, "hit_t": 0.0}
+	await Net.ask(p.pid, {"mode": "tap", "label": "🔀 DOBJ!", "hint": "Kivel cserélsz helyet?", "botAuto": true}, ["tap"], 25)
+	var q = others.pick_random()
+	swap_ui.idx = others.find(q)
+	swap_ui.rolling = false
+	swap_ui.hit_t = t
+	Audio.play("hit")
+	Net.vibrate(p.pid, 80)
+	await sleep(1.3)
+	swap_ui = null
+	print_verbose("[mtn] csere: %s @%d <-> %s @%d" % [p.name, p.node, q.name, q.node])
+	if q.node == p.node:
+		await toast("🔀 %s" % q.name, "Ugyanazon a mezőn állnak, így nem változik semmi.", 1.8, p)
+		return
+	var cols := ["#a855f7", "#ffffff", "#e9d5ff"]
+	for who in [p, q]:
+		var xy := pawn_xy(who)
+		Main.I.burst(xy.x, xy.y, {"n": 30, "colors": cols, "speed": 300})
+	Audio.play("whoosh")
+	m3.shake = 0.4
+	await sleep(0.25)
+	var a: int = p.node
+	p.node = q.node
+	q.node = a
+	p.last_space = "S"
+	Audio.play("sparkle")
+	m3.cam_follow(p.pid, "near", 3)
+	m3.emote(p.pid, "happy" if p.node > a else "sad")
+	m3.emote(q.pid, "happy" if q.node > p.node else "dizzy")
+	Net.vibrate(q.pid, [80, 40, 80])
+	for who in [p, q]:
+		Net.push_status(who.pid)
+	await sleep(0.3)
+	for who in [p, q]:
+		var xy := pawn_xy(who)
+		Main.I.burst(xy.x, xy.y, {"n": 24, "colors": cols, "speed": 260})
+	await toast("🔀 Helycsere!", "%s és %s helyet cserélt (%d. ⇄ %d. mező)" % [p.name, q.name, q.node, p.node], 2.4, p)
 
 
 func _gate_notice(p) -> void:
@@ -438,7 +501,7 @@ func _gate_notice(p) -> void:
 	var info: Dictionary = GATE_INFO[g.kind]
 	m3.cam_node(g.node + 0.5, "close", 2.5)
 	Audio.play("hit")
-	await toast("%s %s állja az utat!" % [info.icon, info.name], "%s a következő körében külön kockával dob: 4, 5 vagy 6 kell, hogy továbbmehessen." % p.name, 2.6, p)
+	await toast("%s %s állja az utat!" % [info.icon, info.name], "%s a következő körében külön kockával dob: %s kell, hogy továbbmehessen." % [p.name, need_txt(g.need)], 2.6, p)
 
 
 ## Az akadály legyőzése – mindegyiknek saját jelenete van.
@@ -574,6 +637,10 @@ func update(dt: float) -> void:
 	else:
 		m3.wind_at(Vector3.ZERO, 0.0, false)
 	m3.render({"pawns": pawns}, dt)
+	if swap_ui and swap_ui.rolling and t >= swap_ui.next:
+		swap_ui.idx = (swap_ui.idx + 1) % swap_ui.others.size()
+		swap_ui.next = t + 0.09
+		Audio.play("roll")
 	if dice:
 		if dice.rolling and t >= dice.next:
 			_dice_randomize()
@@ -609,10 +676,19 @@ func draw(c: CanvasItem) -> void:
 			parts.append("🎲 1–%d" % int(s))
 		var txt := "   +   ".join(parts)
 		if dice.gate:
-			txt = "🚧 akadály-kocka: 4 · 5 · 6 kell"
+			txt = "🚧 akadály-kocka: %s kell" % need_txt(dice.need)
 		var w: float = max(150.0, D.text_width(txt, 22) + 36)
 		D.panel(c, q.x - w / 2, q.y - 196, w, 40, {"r": 20, "fill": Color(0.08, 0.05, 0.19, 0.88), "shadow": false})
 		D.text(c, txt, q.x, q.y - 176, {"size": 22, "color": Color("#ffe066")})
+	if swap_ui:
+		# a figurás kocka: pörgés közben váltakoznak rajta a többiek, aztán megáll valakin
+		var q := pawn_xy(swap_ui.p)
+		var who = swap_ui.others[swap_ui.idx]
+		var pop: float = 1.0 if swap_ui.rolling else 1.0 + 0.35 * max(0.0, 1.0 - (t - swap_ui.hit_t) * 3.0)
+		var sz := 104.0 * pop
+		D.panel(c, q.x - sz / 2, q.y - 190 - sz / 2, sz, sz, {"r": 22, "fill": Color("#f3e8ff"), "stroke": Color("#a855f7") if swap_ui.rolling else who.color, "lw": 6})
+		D.avatar(c, who, q.x, q.y - 190, 38 * pop, {"shadow": false})
+		D.text(c, "🔀 kivel cserél?" if swap_ui.rolling else who.name, q.x, q.y - 116, {"size": 22, "color": Color("#ffe066"), "stroke": D.DARK, "sw": 6})
 	for p in G.players:
 		if p.frozen:
 			var q := pawn_xy(p)

@@ -169,6 +169,7 @@ function connectHost() {
               ? '<p class="muted">Az első nyer, aki felér a csúcsra</p>'
               : `<div class="rounds">${l.roundOptions.map((r) => `<button data-r="${r}" class="${r === l.rounds ? 'sel' : ''}">${r} kör</button>`).join('')}</div>`}
             <button class="start" id="start" ${l.canStart ? '' : 'disabled'}>▶ Játék indítása</button>
+            <button class="testbtn" id="mgtest">🧪 Minijátékok kipróbálása</button>
             <p class="muted">${l.canStart ? `Mindenki kész! (${l.count} játékos)` : 'Várj, amíg mindenki kész lesz…'}</p>
           </div>`
           : `<p class="muted">${l.gameMode === 'mountain' ? '⛰️ Hegymászás' : `${l.rounds} kör`} · ${l.count} játékos · a ⭐ VIP indítja a játékot</p>`}`;
@@ -177,6 +178,7 @@ function connectHost() {
       screen.querySelectorAll('.rounds button').forEach((b) => b.addEventListener('click', () => send({ t: 'rounds', v: Number(b.dataset.r) })));
       screen.querySelectorAll('.modes button').forEach((b) => b.addEventListener('click', () => send({ t: 'mode', v: b.dataset.m })));
       document.getElementById('start')?.addEventListener('click', () => send({ t: 'start' }));
+      document.getElementById('mgtest')?.addEventListener('click', () => send({ t: 'test' }));
     },
 
     choice(l) {
@@ -288,7 +290,7 @@ function connectHost() {
     },
 
     pads(l) {
-      screen.innerHTML = `<h2>${esc(l.title || '')}</h2><div class="pads ${l.enabled ? '' : 'off'}">${l.pads.map((p, i) => `<button class="pad" data-i="${i}" style="background:${esc(p.color)}">${esc(p.shape)}</button>`).join('')}</div>`;
+      screen.innerHTML = `<h2>${esc(l.title || '')}</h2><div class="pads ${l.row ? 'row' : ''} ${l.enabled ? '' : 'off'}">${l.pads.map((p, i) => `<button class="pad" data-i="${i}" style="background:${esc(p.color)}">${esc(p.shape)}</button>`).join('')}</div>`;
       screen.querySelectorAll('.pad').forEach((b) => b.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         if (!l.enabled) return;
@@ -296,6 +298,20 @@ function connectHost() {
         buzz(20);
         b.classList.add('hit');
         setTimeout(() => b.classList.remove('hit'), 140);
+      }));
+    },
+
+    // gombrács (pl. 3×3): akárhányszor nyomható; az üres ("") cella helyén nincs gomb
+    grid(l) {
+      const cols = Math.max(1, Math.min(5, Number(l.cols) || 3));
+      screen.innerHTML = `<h2>${esc(l.title || '')}</h2>
+        <div class="gridpad" style="grid-template-columns:repeat(${cols}, 1fr)">${(l.cells || []).map((cell, i) => (cell ? `<button class="gcell" data-i="${i}">${esc(cell)}</button>` : '<div class="gnone"></div>')).join('')}</div>`;
+      screen.querySelectorAll('.gcell').forEach((b) => b.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        send({ t: 'cell', v: Number(b.dataset.i) });
+        buzz(15);
+        b.classList.add('hit');
+        setTimeout(() => b.classList.remove('hit'), 110);
       }));
     },
 
@@ -337,6 +353,17 @@ function connectHost() {
   function render() {
     if (!layout) return;
     (R[layout.mode] || R.wait)(layout);
+    // próbakör az ismertető alatt: a játék vezérlője fölött ott a „Kész vagyok” sáv
+    if (layout.practice) {
+      const done = !!layout.pdone;
+      screen.insertAdjacentHTML('afterbegin', `<button class="pbar ${done ? 'on' : ''}" id="pbar">${done ? '✔ Kész vagy – gyakorolhatsz tovább' : '🎮 Próbakör · ✋ KÉSZ VAGYOK!'}</button>`);
+      document.getElementById('pbar').addEventListener('click', (e) => {
+        if (done) return;
+        e.target.disabled = true;
+        buzz(30);
+        send({ t: 'ready' });
+      });
+    }
   }
 
   document.addEventListener('contextmenu', (e) => e.preventDefault());

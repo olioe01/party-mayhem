@@ -4,6 +4,8 @@ extends Node
 var force_mg := ""
 var test_start_node := 0     # --start-node=N: hegymászás teszteléséhez, a rajt helyett innen indul mindenki
 var test_shots := false
+var mgtest_auto := false     # --mgtest: a lobbiból a tesztfelület nyílik, és sorban végigjátssza a minijátékokat
+var mgtest_i := 0
 var test_tiles := ""         # --tiles=F|P|X: teszthez a rajt utáni sima mezők mind ilyenek lesznek
 
 
@@ -21,6 +23,10 @@ func apply_args(args: PackedStringArray) -> void:
 			test_tiles = a.get_slice("=", 1)
 		elif a.begins_with("--mg="):
 			force_mg = a.get_slice("=", 1)
+		elif a == "--mgtest" or a.begins_with("--mgtest="):      # --mgtest=N: az N. minijátéktól indul
+			mgtest_auto = true
+			if a.contains("="):
+				mgtest_i = int(a.get_slice("=", 1))
 		elif a == "--small":
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 			DisplayServer.window_set_size(Vector2i(960, 540))
@@ -59,7 +65,21 @@ func after_boot(args: PackedStringArray) -> void:
 			get_tree().create_timer(q, true, false, true).timeout.connect(func(): get_tree().quit())
 	for i in nb:
 		Net.add_bot("Bot %d" % (i + 1))
-	if autostart:
+	if mgtest_auto:
+		# valós időben próbálkozik, amíg a lobbi beúszása véget nem ér (lassú gépen ez sokáig tarthat)
+		var tt := Timer.new()
+		tt.wait_time = 1.0
+		tt.ignore_time_scale = true
+		add_child(tt)
+		tt.timeout.connect(func():
+			if Main.I.scene == null:
+				return
+			if not (Main.I.scene is LobbyScene):
+				tt.queue_free()
+			elif Main.I._fade_dir == 0:
+				Sync.submit({"k": "key", "c": KEY_T}))
+		tt.start()
+	elif autostart:
 		get_tree().create_timer(1.5).timeout.connect(func(): Sync.submit({"k": "start"}))
 	if shots_dir != "":
 		DirAccess.make_dir_recursive_absolute(shots_dir)
@@ -171,6 +191,7 @@ func update_vip() -> void:
 
 func go_lobby() -> void:
 	G.phase = "lobby"
+	G.mg_test = false
 	G.players = G.players.filter(func(p): return p.connected or p.is_bot)
 	for p in G.players:
 		p.ready = p.is_bot
@@ -215,6 +236,9 @@ func start_game() -> void:
 
 
 func after_minigame() -> void:
+	if G.mg_test:
+		Main.I.set_scene(MgFlow.TestScene.new())
+		return
 	if G.is_mountain():
 		# hegymászásnál a kör a minijátékkal kezdődik, utána jön a dobás
 		Main.I.set_scene(MountainScene.new(false))

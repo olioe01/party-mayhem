@@ -7,6 +7,7 @@ const S := 1.0               # a hatszög sugara
 const BODY := 0.42
 const ACC := 40.0
 const MAXV := 4.5
+const SAFE_T := 3.0             # az első 3 mp-ben még nem reped a jég
 const REFREEZE_UNTIL := 30.0   # eddig fagynak vissza a leszakadt csempék
 
 var rad := 4
@@ -22,7 +23,7 @@ var crack_mat: StandardMaterial3D
 func meta() -> Dictionary:
 	return {"id": "ice", "name": "Olvadó jégtábla", "icon": "🧊", "color": "#74c0fc", "modes": ["ffa", "2v2", "1v3"],
 		"tagline": "Ne állj meg egy pillanatra sem!",
-		"desc": "Hatszögletű jégcsempéken álltok a jeges víz fölött. Amelyik csempére rálépsz, megreped, és pár pillanat múlva leszakad – úgyhogy folyamatosan mozogni kell! A leszakadt csempék eleinte visszafagynak, de fél perc után már nem, és a jég a szélekről is olvadni kezd. Az utolsó talpon maradó nyer.",
+		"desc": "Hatszögletű jégcsempéken álltok a jeges víz fölött. Az első 3 másodpercben még tart a jég, utána amelyik csempére rálépsz, megreped, és pár pillanat múlva leszakad – úgyhogy folyamatosan mozogni kell! A leszakadt csempék eleinte visszafagynak, de fél perc után már nem, és a jég a szélekről is olvadni kezd. Az utolsó talpon maradó nyer.",
 		"controls": "A joystickkal mozogsz. Mindig lépj tovább egy ép csempére, mielőtt alattad leszakad!"}
 
 
@@ -209,7 +210,7 @@ func update(dt: float) -> void:
 		var solid: bool = ti >= 0 and tiles[ti].state < 2
 		if solid:
 			s.air = 0.0
-			if tiles[ti].state == 0:
+			if tiles[ti].state == 0 and t >= SAFE_T:
 				tiles[ti].state = 1
 				tiles[ti].tm = _delay()
 				Audio.play("tick", 0.7)
@@ -342,4 +343,6 @@ func draw(c: CanvasItem) -> void:
 	D.text(c, "🧊 Talpon: %d / %d" % [alive, st.size()], 30, 36, {"size": 26, "align": "left", "stroke": Color.BLACK, "sw": 6})
 	if t > REFREEZE_UNTIL - 1.0 and t < REFREEZE_UNTIL + 4.0:
 		D.text(c, "☀️ Már nem fagy vissza – olvad a jég!", 640, 110, {"size": 36, "color": Color("#ffd43b"), "stroke": D.DARK, "sw": 9})
+	if t < SAFE_T:
+		D.text(c, "🧊 A jég %d mp múlva kezd repedni!" % ceili(SAFE_T - t), 640, 110, {"size": 36, "color": Color("#a5d8ff"), "stroke": D.DARK, "sw": 9})
 	D.timer_hud(c, LIMIT - t, 1180, 40)

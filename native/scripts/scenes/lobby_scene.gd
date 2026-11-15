@@ -110,6 +110,9 @@ func input(pid: String, msg: Dictionary) -> void:
 	elif tt == "start" and pid == G.vip and can_start():
 		go()
 		return
+	elif tt == "test" and pid == G.vip:
+		open_test()
+		return
 	else:
 		return
 	refresh()
@@ -138,9 +141,20 @@ func go() -> void:
 	Game.start_game()
 
 
+## Tesztfelület: a minijátékok tét nélkül kipróbálhatók.
+func open_test() -> void:
+	if G.players.is_empty() or going:
+		return
+	going = true
+	Audio.play("select")
+	Main.I.set_scene(MgFlow.TestScene.new())
+
+
 func key(e: InputEventKey) -> void:
 	if e.keycode == KEY_ENTER or e.keycode == KEY_KP_ENTER:
 		go()
+	elif e.keycode == KEY_T:
+		open_test()
 	elif e.keycode == KEY_B:
 		add_bot()
 	elif e.keycode == KEY_J:
@@ -221,6 +235,7 @@ func draw(c: CanvasItem) -> void:
 		D.text(c, "Ugyanazon a Wi-Fi hálózaton legyél!", 240, 607, {"size": 16, "color": Color("#a99fd6"), "bold": false})
 
 	D.text(c, "Játékosok (%d/%d)" % [G.players.size(), G.MAX_PLAYERS], 470, 152, {"size": 26, "align": "left"})
+	button(c, 1030, 137, 212, 26, "🧪 Minijáték teszt", open_test, {"color": Color("#b197fc") if not G.players.is_empty() else Color("#555555"), "size": 15})
 	# játékmód-választó
 	D.text(c, "Játékmód:", 700, 36, {"size": 20, "align": "left", "color": Color("#d6ccff")})
 	for i in G.MODES.size():
@@ -229,7 +244,7 @@ func draw(c: CanvasItem) -> void:
 		var mid: String = gm.id
 		button(c, 700 + i * 275, 54, 262, 50, "%s %s" % [gm.icon, gm.name], func(): set_mode(mid),
 			{"color": Color("#ffd43b") if sel else Color("#4b3a8a"), "text_color": Color("#2b1055") if sel else Color.WHITE, "size": 23})
-	D.text(c, G.mode_info().desc, 700, 128, {"size": 17, "align": "left", "color": Color("#ffe8a3"), "maxw": 540, "bold": false})
+	D.text(c, G.mode_info().desc, 700, 124, {"size": 17, "align": "left", "color": Color("#ffe8a3"), "maxw": 540, "bold": false})
 	for i in G.MAX_PLAYERS:
 		var s := slot_pos(i)
 		var p = G.players[i] if i < G.players.size() else null
@@ -268,4 +283,4 @@ func draw(c: CanvasItem) -> void:
 	var can := not G.players.is_empty()
 	button(c, 1080, 640, 160, 56, "INDÍTÁS", go, {"color": Color("#51cf66") if can else Color("#555555"), "size": 26})
 	D.text(c, "A ⭐ VIP a telefonjáról is indíthat, ha mindenki kész. Itt: ENTER = indítás", 50, 680, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false, "maxw": 400})
-	D.text(c, "B = bot · J = játékmód · F = teljes képernyő · M = hang · P = FPS · O = online", 50, 700, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false})
+	D.text(c, "B = bot · J = játékmód · T = minijáték teszt · F = teljes képernyő · M = hang · P = FPS · O = online", 50, 700, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false})

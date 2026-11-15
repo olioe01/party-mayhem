@@ -9,6 +9,7 @@ var finished := false
 var t := 0.0
 var cam: Camera3D
 var env: Environment
+var preview := false         # próbakör az ismertető képernyőn: saját kis nézetben fut, nem a fő világban
 
 
 func setup(p_players: Array, p_teams: Array) -> void:
@@ -57,7 +58,11 @@ func make_env(top := "#1e3a8a", horizon := "#93c5fd", ambient := 0.8) -> void:
 	env.ssao_enabled = true
 	env.adjustment_enabled = true
 	env.adjustment_saturation = 1.1
-	Main.I.world_env.environment = env
+	if preview:
+		if cam:
+			cam.environment = env
+	else:
+		Main.I.world_env.environment = env
 
 
 func make_camera(pos: Vector3, look: Vector3, fov := 45.0) -> Camera3D:
@@ -67,6 +72,8 @@ func make_camera(pos: Vector3, look: Vector3, fov := 45.0) -> Camera3D:
 	cam.position = pos
 	cam.look_at(look, Vector3.UP)
 	cam.make_current()
+	if preview and env:
+		cam.environment = env
 	return cam
 
 

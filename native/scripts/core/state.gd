@@ -56,6 +56,7 @@ var round := 1
 var vip := ""
 var crown_node := -1
 var recent_mg: Array = []
+var mg_test := false             # a lobbi tesztfelületéről indított minijáték: nincs jutalom, utána vissza a listához
 var board = null                 # BoardLayout.Board
 var hidden_blocks := {}          # node id -> "coins"|"crown"|"item"
 var team_split: Array = []       # [[pid..],[pid..]] csapatos minijátékhoz, ha van

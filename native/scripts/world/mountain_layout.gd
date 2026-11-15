@@ -3,7 +3,8 @@ class_name MountainLayout
 ## Tiszta adat + geometria (a 3D megjelenítés a Mountain3D-ben van).
 ##
 ## Mezők: T rajt · N sima · P büntető (vissza N mezőt) · F hátszél (előre N mezőt)
-##        X jég (kimaradsz egy dobásból) · G akadály (külön kockával 4-5-6 kell) · W csúcs (cél)
+##        X jég (kimaradsz egy dobásból) · S csere (figurás kockával dobsz, és helyet cserélsz azzal, akit kidobtál)
+##        G akadály (külön kockával az elsőnél 4, a másodiknál 5, az utolsónál 6 kell legalább) · W csúcs (cél)
 
 const GOAL := 80             # a csúcs mező sorszáma (a rajt a 0.), vagyis 80 lépés az út
 const SPIRAL_N := 80         # a 0..79. mező van a spirálon, a 80. a csúcs közepe
@@ -17,7 +18,7 @@ const SUMMIT_Y := H + 0.45
 
 const GATE_NODES := [20, 42, 62]
 const GATE_KINDS := ["wall", "cannon", "yeti"]   # téglafal · ágyús bástya · alvó jeti
-const GATE_PASS := 4         # az akadály-kockán legalább ennyi kell (4-5-6)
+const GATE_NEEDS := [4, 5, 6]                    # az akadály-kockán legalább ennyi kell, sorban egyre nehezebb
 
 static var _theta: PackedFloat32Array = PackedFloat32Array()
 
@@ -87,13 +88,13 @@ static func build() -> Dictionary:
 	for k in GATE_NODES.size():
 		var id: int = GATE_NODES[k] + randi_range(-2, 2)
 		nodes[id].type = "G"
-		nodes[id].val = GATE_PASS
-		gates.append({"node": id, "kind": GATE_KINDS[k], "need": GATE_PASS, "open": false, "idx": k})
+		nodes[id].val = GATE_NEEDS[k]
+		gates.append({"node": id, "kind": GATE_KINDS[k], "need": GATE_NEEDS[k], "open": false, "idx": k})
 	# különleges mezők: zónánként elosztva, hogy lent szelídebb, fent keményebb legyen a hegy
 	var plan := [
-		{"from": 3, "to": 26, "P": 4, "X": 1, "F": 2, "vals": [2, 2, 3, 3]},
-		{"from": 27, "to": 53, "P": 5, "X": 1, "F": 2, "vals": [2, 3, 3, 4, 4]},
-		{"from": 54, "to": 78, "P": 6, "X": 2, "F": 2, "vals": [3, 4, 4, 5, 6, 4]},
+		{"from": 3, "to": 26, "P": 4, "X": 1, "F": 2, "S": 1, "vals": [2, 2, 3, 3]},
+		{"from": 27, "to": 53, "P": 5, "X": 1, "F": 2, "S": 1, "vals": [2, 3, 3, 4, 4]},
+		{"from": 54, "to": 78, "P": 6, "X": 2, "F": 2, "S": 1, "vals": [3, 4, 4, 5, 6, 4]},
 	]
 	var special := func(i: int) -> bool:
 		return i >= 0 and i <= GOAL and nodes[i].type != "N"
@@ -102,6 +103,7 @@ static func build() -> Dictionary:
 		for k in z.P: kinds.append("P")
 		for k in z.X: kinds.append("X")
 		for k in z.F: kinds.append("F")
+		for k in z.S: kinds.append("S")     # cseremező: zónánként egy, összesen három
 		var vals: Array = z.vals.duplicate()
 		vals.shuffle()
 		var cand: Array = range(z.from, z.to + 1)

@@ -320,6 +320,10 @@ func resend_all() -> void:
 
 
 # ------------------------------------------------------------------ kontroller-vezérlés
+var practice := false        # az ismertető képernyő próbaköre fut
+var practice_done := {}      # pid -> true: már megnyomta a „Kész”-t
+
+
 func is_bot(pid: String) -> bool:
 	return bots.has(pid)
 
@@ -343,6 +347,10 @@ func handle_input(pid: String, msg: Dictionary) -> void:
 
 func set_ctrl(pid: String, layout: Dictionary) -> int:
 	_seq += 1
+	if practice:
+		# próbakör: a telefon a játék vezérlője fölé egy „Kész vagyok” sávot is kitesz
+		layout["practice"] = true
+		layout["pdone"] = practice_done.has(pid)
 	layout["id"] = _seq
 	layout["me"] = status_provider.call(pid)
 	layouts[pid] = layout
