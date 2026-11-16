@@ -74,7 +74,7 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 - 🔵🔴 **Csapatos minijátékok:** 4 játékosnál az utolsó mező színe dönti el a csapatokat. Kék mező esetén a kék csapatba, piros mező esetén a piros csapatba kerülsz, az eseménymezők véletlenszerűen osztanak. Így 2 a 2 vagy 1 a 3 ellen is lehet játék.
 - 🏆 **Végén 3 bónusz korona** 7 lehetséges közül (minijáték-mester, vándor, krőzus, pechmadár, kalandor, vásárkirály, barátságos), majd 3D dobogó.
 
-**23 minijáték:**
+**24 minijáték:**
 
 | | Név | Irányítás | Megjelenés |
 |---|---|---|---|
@@ -91,6 +91,7 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 | 💣 | Forró bomba *(új)* | joystick – célzás, gomb – dobás; akinél felrobban, kiesik | 3D |
 | 🎨 | Festékcsata *(új)* | joystick – amerre jársz, a te színedre vált a padló; vödör = nagy folt | 3D |
 | 🧊 | Olvadó jégtábla *(új)* | joystick – a csempe leszakad alattad, eleinte visszafagy | 3D |
+| 🎁 | Ajándéktorony *(új)* | ◀ ▶ – billegő ajándéktornyot egyensúlyozol: szél, remegés, félidőben plusz doboz, teherautó takarja a képet; a gépen A/D vagy ←/→ az első botot irányítja | 3D |
 | 🏗️ | Toronyépítő *(új)* | koppintás – ejtsd a lengő blokkot pontosan a toronyra | 3D |
 | 🎣 | Horgászverseny *(új)* | koppintás, amikor lemerül az úszó; kis hal 1, nagy hal 3, bakancs −1 | 3D |
 | 🔦 | Zseblámpás bújócska *(új, 1 a 3 ellen vagy sorsolt keresővel)* | joystick – a kereső fénykúpja elől a ládák mögé kell bújni | 3D, sötét |
@@ -137,7 +138,7 @@ native/
   scripts/world/                 board_layout (pálya), board3d (3D tábla, kamera), chars3d (18 figura),
                                  mountain_layout + mountain3d (a hegymászás pályája és 3D hegye)
   scripts/scenes/                lobby, board (táblamenet), mountain (hegymászás), mg_flow (minijáték-keret), final
-  scripts/minigames/             a 23 minijáték
+  scripts/minigames/             a minijátékok (a díszletet külön fájl is adhatja, pl. presents_world.gd)
   web/                           telefonos kontroller (HTML/JS/CSS + portrék), becsomagolva: web.zip
   music/, tools/                 zenék és a generátoruk
 ```

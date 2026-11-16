@@ -35,6 +35,8 @@ func input(_p, _msg: Dictionary) -> void: pass
 func draw(_c: CanvasItem) -> void: pass
 ## [{pid, score, label}] csökkenő sorrendben
 func ranking() -> Array: return []
+## true: a gépen az A/D és a ←/→ billentyű is ad „lr” bemenetet (az első bot helyett lehet vele játszani)
+func keyboard_lr() -> bool: return false
 
 
 # ------------------------------------------------------------------ közös 3D segédek

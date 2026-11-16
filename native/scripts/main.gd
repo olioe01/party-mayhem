@@ -170,6 +170,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mp := overlay.get_local_mouse_position()
 		Sync.submit({"k": "click", "x": mp.x, "y": mp.y})
 		return
+	if event is InputEventKey and not event.echo and _keyboard_lr(event):
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		var k: int = event.keycode
 		if k == KEY_M:
@@ -187,6 +189,40 @@ func _unhandled_input(event: InputEvent) -> void:
 			screenshot("user://screenshot_%d.png" % Time.get_unix_time_from_system())
 		else:
 			Sync.submit({"k": "key", "c": k})
+
+
+## Billentyűzetes irányítás az ezt kérő minijátékokban (Minigame.keyboard_lr): az A/D és a ←/→
+## ugyanazt az „lr” bemenetet adja, mint a telefon ◀ ▶ gombja, az első gépi játékos nevében.
+## A bemenet a közös eseménysoron megy át, így a lépésütemet nem bontja meg.
+var _kb_keys := {}
+var _kb_dir := 0
+
+func _keyboard_lr(event: InputEventKey) -> bool:
+	var k: int = event.keycode
+	var left := k == KEY_A or k == KEY_LEFT
+	var right := k == KEY_D or k == KEY_RIGHT
+	if not left and not right:
+		return false
+	var inst = scene.get("inst") if scene and not scene.dead else null
+	if inst == null or not is_instance_valid(inst) or not (inst is Minigame) or not inst.keyboard_lr():
+		_kb_keys.clear()
+		_kb_dir = 0
+		return false
+	if event.pressed:
+		_kb_keys[k] = 1 if right else -1
+	else:
+		_kb_keys.erase(k)
+	var dir := 0
+	for v in _kb_keys.values():
+		dir += v
+	dir = clampi(dir, -1, 1)
+	if dir != _kb_dir:
+		_kb_dir = dir
+		for p in inst.players:
+			if Net.is_bot(p.pid):
+				Sync.submit({"k": "in", "pid": p.pid, "m": {"t": "lr", "v": dir, "kb": true}})
+				break
+	return true
 
 
 func screenshot(path: String) -> void:

@@ -173,6 +173,26 @@ func _noise_burst(buf: PackedFloat32Array, d: float, v := 0.3, at := 0.0, cutoff
 		buf[start + i] += lp * v * pow(0.0005, k) * 1.6
 
 
+## Elnyújtott, fel- majd lefutó zaj (szél); tone > 0 esetén alá pöfögő motorhang kerül.
+func _swell(buf: PackedFloat32Array, d: float, v := 0.3, cutoff := 900.0, at := 0.0, tone := 0.0) -> void:
+	var start := int(at * RATE)
+	var n := int(d * RATE)
+	if buf.size() < start + n + 10:
+		buf.resize(start + n + 10)
+	var a: float = clamp(cutoff / RATE * TAU, 0.01, 1.0)
+	var lp := 0.0
+	var ph := 0.0
+	for i in n:
+		var k := float(i) / n
+		var env := pow(sin(k * PI), 1.3)
+		lp += (_noise[(i * 7) % _noise.size()] - lp) * a
+		var s := lp * 2.2
+		if tone > 0.0:
+			ph = fmod(ph + tone / RATE, 1.0)
+			s += ((2.0 * ph - 1.0) * 0.5 + (1.0 if ph < 0.5 else -1.0) * 0.25) * (0.65 + 0.35 * sin(float(i) / RATE * TAU * 11.0))
+		buf[start + i] += s * v * env
+
+
 func _build_sfx() -> void:
 	var b: PackedFloat32Array
 	b = PackedFloat32Array(); _tone(b, 880, 0.035, "square", 0.05); _store("tick", b, 6)
@@ -214,6 +234,26 @@ func _build_sfx() -> void:
 	_store("ally", b)
 	b = PackedFloat32Array(); _noise_burst(b, 0.12, 0.25, 0, 5000); _tone(b, 1600, 0.05, "square", 0.05); _store("clap", b, 8)
 	b = PackedFloat32Array(); _tone(b, 1046, 0.6, "sine", 0.18); _tone(b, 1568, 0.6, "sine", 0.08); _tone(b, 2093, 0.4, "sine", 0.05); _store("bell", b)
+	# Ajándéktorony: szél, teherautó, bicikli, leboruló dobozok
+	b = PackedFloat32Array(); _swell(b, 1.7, 0.2, 800); _store("wind", b, 2)
+	b = PackedFloat32Array(); _swell(b, 1.5, 0.42, 1500); _swell(b, 1.1, 0.2, 400, 0.2); _store("gust", b, 2)
+	b = PackedFloat32Array(); _swell(b, 2.0, 0.28, 260, 0.0, 58.0); _store("truck", b, 2)
+	b = PackedFloat32Array()
+	for at in [0.0, 0.34]:
+		_tone(b, 311, 0.9, "square", 0.09, 0, at); _tone(b, 392, 0.9, "square", 0.07, 0, at)
+	_store("horn", b, 2)
+	b = PackedFloat32Array()
+	for at in [0.0, 0.17]:
+		_tone(b, 2093, 0.5, "sine", 0.16, 0, at); _tone(b, 2794, 0.4, "sine", 0.07, 0, at)
+	_store("bikebell", b, 2)
+	b = PackedFloat32Array(); _noise_burst(b, 0.55, 0.45, 0, 2400); _tone(b, 110, 0.4, "sine", 0.4, -50)
+	for i in 4: _tone(b, [330, 247, 294, 196][i], 0.12, "triangle", 0.16, -60, 0.1 + i * 0.11)
+	_store("crash", b, 3)
+	b = PackedFloat32Array(); _tone(b, 125, 0.2, "triangle", 0.38, -55); _noise_burst(b, 0.1, 0.18, 0, 900); _store("thud", b, 6)
+	b = PackedFloat32Array()
+	for i in 9: _tone(b, 150 + (i % 2) * 34, 0.07, "triangle", 0.13, 0, i * 0.075)
+	_store("tremble", b, 3)
+	b = PackedFloat32Array(); _tone(b, 196, 0.5, "saw", 0.05, 70); _tone(b, 392, 0.5, "triangle", 0.05, 120); _store("strain", b, 3)
 	var pads := [329.63, 261.63, 392.0, 523.25]
 	for i in 4:
 		b = PackedFloat32Array(); _tone(b, pads[i], 0.4, "triangle", 0.3); _store("pad%d" % i, b)
