@@ -1,8 +1,10 @@
 extends Minigame
 ## Kártyafogó: 12 lefordított lap (3 sor × 4 oszlop); minden sorban mindenkinek pontosan egy lapja van.
-## Soronként, körbe haladva mindenki felfordít egyet. Ha a saját portréd van rajta, pont jár és a lap fent marad;
-## ha nem, a lap visszafordul – aki figyelt, az a saját körében tudja, hol a lapja. Előre semmit nem mutatunk meg.
-## Holtversenynél a gyorsabb (kevesebb összes gondolkodási idő) nyer.
+## Körbe haladva mindenki a saját három lapját keresi egy menetben: előbb az 1. sorban fordít fel egyet,
+## ha az övé, jöhet a 2. sor, aztán a 3. Ha bármelyik sorban mellényúl, a menetben felfordított összes lapja
+## visszafordul, és legközelebb újra az 1. sortól kezd. Csak annak a lapjai maradnak végleg fent, aki mindhárom
+## sorban megtalálta a sajátját – ő végzett (aki elsőként, az nyer). A játék addig tart, amíg egy játékos marad.
+## A végül be nem fejezők sorrendje: a legjobb menetük (hány sorig jutottak), aztán a kevesebb gondolkodási idő.
 
 const K = preload("res://scripts/minigames/mg_kit.gd")
 
@@ -18,6 +20,7 @@ const FLIP_DUR := 0.5
 const FIRST_TURN := 1.0
 const AI_MEMORY := [0.45, 0.7, 0.92]    # mekkora eséllyel jegyez meg egy felfedett lapot a gép (könnyű, közepes, nehéz)
 const AI_THINK := [[2.2, 4.5], [1.4, 3.0], [0.8, 1.9]]
+const TURN_CAP := 12               # legfeljebb ennyi menete lehet mindenkinek (utána vége)
 const TEX_W := 150
 const TEX_H := 200
 
@@ -25,10 +28,10 @@ static var _tex_cache := {}
 
 var pl: Array = []              # helyek (valódi és gépi játékosok)
 var cards: Array = []
-var stage := "intro"            # intro | turn | reveal | result | rowwait | rowend | done
-var row_i := 0
-var order: Array = []           # az aktuális sor játékossorrendje (pl indexek)
-var turn_k := 0
+var stage := "intro"            # intro | turn | reveal | result | fail | flipback | won | done
+var row_i := 0                  # a soron lévő játékos aktuális sora
+var turns := 0                  # eddigi menetek száma
+var fin_count := 0              # hányan végeztek már
 var active := -1
 var turn_t0 := 0.0
 var pick := -1
@@ -52,9 +55,9 @@ var row_labels: Array = []
 
 func meta() -> Dictionary:
 	return {"id": "cards", "name": "Kártyafogó", "icon": "🃏", "color": "#c2255c", "modes": ["ffa"], "max_players": 4,
-		"tagline": "Hol a te arcod?",
-		"desc": "Tizenkét lefordított lap fekszik az asztalon: minden sorban mindenkinek pontosan egy lapja van. Soronként mindenki felfordít egyet – ha a saját képed van rajta, pont jár. A rossz lap visszafordul, úgyhogy figyeld, mit fordítanak fel a többiek!",
-		"controls": "Amikor rád kerül a sor, 10 másodperced van: nyomd meg az aktív sor 1–4. lapjának gombját."}
+		"tagline": "Találd meg mind a három lapodat!",
+		"desc": "Tizenkét lefordított lap fekszik az asztalon: minden sorban mindenkinek pontosan egy lapja van. Ha rád kerül a sor, előbb az 1. sorban keresed a sajátodat – ha megvan, jöhet a 2., aztán a 3. sor. Ha bármelyiknél mellényúlsz, minden lapod visszafordul, és legközelebb elölről kezded. Aki elsőként találja meg mind a hármat, nyer – figyeld, mit fordítanak fel a többiek!",
+		"controls": "Amikor rád kerül a sor, lapponként 10 másodperced van: nyomd meg az aktuális sorod 1–4. lapjának gombját."}
 
 
 func layout(p) -> Dictionary:
@@ -89,7 +92,7 @@ func _ready() -> void:
 		if cpu or p.is_bot:
 			lvl = K.ai_level(ai_k)
 			ai_k += 1
-		pl.append({"p": p, "cpu": cpu, "i": i, "col": Color(K.SLOT_COLORS[i % 4]), "pts": 0, "miss": 0, "time": 0.0,
+		pl.append({"p": p, "cpu": cpu, "i": i, "col": Color(K.SLOT_COLORS[i % 4]), "row": 0, "best": 0, "fin": -1, "turn_cards": [], "miss": 0, "time": 0.0,
 			"lvl": lvl, "mem": {}, "think": 0.0, "react_t": -10.0, "react_ok": false})
 	_deal()
 	_sync(0.0)
@@ -198,7 +201,7 @@ func _deal() -> void:
 		front.position = Vector3(0, -CARD_T / 2 - 0.003, 0)
 		piv.add_child(front)
 		cards.append({"owner": owners[k], "r": r, "c": c, "base": base, "piv": piv, "sh": sh, "back_m": back_m, "front_m": front_m,
-			"up": false, "flip_t0": -10.0, "from": 0.0, "to": 0.0, "taken": -1, "ok": false})
+			"up": false, "perm": false, "flip_t0": -10.0, "from": 0.0, "to": 0.0, "ok": false})
 
 
 func _card_body() -> ArrayMesh:
@@ -357,10 +360,12 @@ func _ctrl_for(p) -> Dictionary:
 			var cd: Dictionary = cards[row_i * COLS + c]
 			cells.append("" if cd.up else "🃏 %d" % (c + 1))
 		return {"mode": "grid", "cols": 4, "title": "%d. sor – melyik a te lapod?" % (row_i + 1), "cells": cells}
+	if si >= 0 and pl[si].fin >= 0:
+		return {"mode": "wait", "icon": "✅", "title": "Megtaláltad mind a hármat!", "text": "%d. lettél – nézd, hogy boldogulnak a többiek." % (pl[si].fin + 1)}
 	if stage == "intro":
 		return {"mode": "wait", "icon": "👀", "title": "Figyelj!", "text": "Jegyezd meg, mit fordítanak fel a többiek!"}
 	if active >= 0 and active < pl.size():
-		return {"mode": "wait", "icon": "🃏", "title": "%s választ…" % pl[active].p.name, "text": "%d. sor" % (row_i + 1)}
+		return {"mode": "wait", "icon": "🃏", "title": "%s keres…" % pl[active].p.name, "text": "%d. sor" % (row_i + 1)}
 	return {"mode": "wait", "icon": "🃏", "title": "Figyeld az asztalt!"}
 
 
@@ -434,7 +439,6 @@ func _choose(k: int) -> void:
 	pick = k
 	pick_t = t
 	s.time += t - turn_t0
-	cd.taken = active
 	_flip(cd, true)
 	Audio.play("flip", FX.fr(0.95, 1.1))
 	next_at = t + FLIP_DUR + 0.15
@@ -455,8 +459,7 @@ func update(dt: float) -> void:
 	match stage:
 		"intro":
 			if t >= FIRST_TURN:
-				row_i = 0
-				_start_row()
+				_give_turn(0)
 		"turn":
 			if t - turn_t0 >= TURN_TIME:
 				var s: Dictionary = pl[active]
@@ -466,25 +469,21 @@ func update(dt: float) -> void:
 				s.react_ok = false
 				Audio.play("bad")
 				_say("Lejárt az idő!", Color("#ff8787"), 1.0)
-				stage = "rowwait"
-				next_at = t + 1.0
+				stage = "fail"
+				next_at = t + 0.8
 				_push_ctrl()
 		"reveal":
 			if t >= next_at:
 				_evaluate()
 		"result":
 			if t >= next_at:
-				_next_turn()
-		"rowwait":
+				_begin_turn()
+		"fail":
 			if t >= next_at:
-				_next_turn()
-		"rowend":
+				_flip_back()
+		"flipback", "won":
 			if t >= next_at:
-				row_i += 1
-				if row_i >= ROWS:
-					_finish()
-				else:
-					_start_row()
+				_pass_turn()
 		"done":
 			if t >= done_t + 4.2:
 				finished = true
@@ -504,22 +503,25 @@ func _remember(k: int) -> void:
 			s.mem[k] = cards[k].owner
 
 
-func _start_row() -> void:
-	order.clear()
-	for k in pl.size():
-		order.append((row_i + k) % pl.size())
-	turn_k = 0
-	_say("%d. sor" % (row_i + 1), Color("#ffe066"), 1.0)
+## Új menet: a játékos az 1. sortól kezdi.
+func _give_turn(i: int) -> void:
+	active = i
+	turns += 1
+	var s: Dictionary = pl[i]
+	s.row = 0
+	s.turn_cards = []
+	_say("%s keres" % s.p.name, s.col.lightened(0.35), 1.0)
 	Audio.play("go")
 	_begin_turn()
 
 
+## Egy tipp a soron lévő játékos aktuális sorában (egy menetben több is lehet).
 func _begin_turn() -> void:
-	active = order[turn_k]
+	var s: Dictionary = pl[active]
+	row_i = s.row
 	turn_t0 = t
 	stage = "turn"
 	pick = -1
-	var s: Dictionary = pl[active]
 	var th: Array = AI_THINK[s.lvl]
 	s.think = randf_range(th[0], th[1])
 	hover_next = 0.0
@@ -535,45 +537,79 @@ func _evaluate() -> void:
 	s.react_t = t
 	s.react_ok = ok
 	var sp := screen(cd.base)
-	if ok:
-		s.pts += 1
-		Audio.play("sparkle")
-		Audio.play("coin")
-		Main.I.burst(sp.x, sp.y, {"n": 28, "colors": ["#ffe066", "#ffffff", "#fff3bf", (s.col as Color).to_html()], "speed": 300, "gravity": 220, "size": 7})
-		Main.I.float_text(sp.x, sp.y - 40, "+1 ⭐", Color("#ffe066"), 38)
-	else:
+	# aki figyelt, megjegyzi, mi volt a lapon
+	_remember(pick)
+	if not ok:
 		Audio.play("bad")
 		Main.I.float_text(sp.x, sp.y - 40, "✖", Color("#ff6b6b"), 42)
-	# aki figyelt, megjegyzi, mi volt a lapon (a jó lap úgyis fent marad)
-	_remember(pick)
-	stage = "result"
-	next_at = t + 1.1
-
-
-func _next_turn() -> void:
-	# a rossz lap visszafordul: innentől csak az emlékezet segít
-	if pick >= 0 and not cards[pick].ok and cards[pick].up:
-		_flip(cards[pick], false)
-		cards[pick].taken = -1
-		Audio.play("flip", FX.fr(0.85, 0.95))
-	pick = -1
-	turn_k += 1
-	var free := 0
-	for c in COLS:
-		if not cards[row_i * COLS + c].up:
-			free += 1
-	if turn_k >= order.size() or free == 0:
-		# a sor végén a maradék lapokat is felfedjük
-		for c in COLS:
-			var cd: Dictionary = cards[row_i * COLS + c]
-			if not cd.up:
-				_flip(cd, true)
-		active = -1
-		stage = "rowend"
-		next_at = t + 1.4
-		_push_ctrl()
+		if not s.turn_cards.is_empty():
+			_say("Minden visszafordul!", Color("#ff8787"), 1.1)
+		stage = "fail"
+		next_at = t + 1.1
 		return
-	_begin_turn()
+	s.turn_cards.append(pick)
+	s.row += 1
+	s.best = maxi(s.best, s.row)
+	Audio.play("sparkle")
+	Main.I.burst(sp.x, sp.y, {"n": 28, "colors": ["#ffe066", "#ffffff", "#fff3bf", (s.col as Color).to_html()], "speed": 300, "gravity": 220, "size": 7})
+	if s.row < ROWS:
+		Audio.play("coin")
+		Main.I.float_text(sp.x, sp.y - 40, "✔ %d/%d" % [s.row, ROWS], Color("#ffe066"), 38)
+		stage = "result"
+		next_at = t + 0.9
+		return
+	# mindhárom megvan: a lapjai végleg fent maradnak
+	s.fin = fin_count
+	fin_count += 1
+	for k in s.turn_cards:
+		cards[k].perm = true
+	Audio.play("fanfare" if s.fin == 0 else "win")
+	Main.I.float_text(sp.x, sp.y - 40, "✔ %d/%d" % [s.row, ROWS], Color("#ffe066"), 38)
+	_say(("🏆 %s nyert!" if s.fin == 0 else "✅ %s végzett!") % s.p.name, Color("#ffd43b"), 1.8)
+	if s.fin == 0 and not preview:
+		Main.I.confetti(60)
+	stage = "won"
+	next_at = t + 2.0
+	_push_ctrl()
+
+
+## Mellényúlt (vagy lejárt az idő): a menetben felfordított összes lapja visszafordul.
+func _flip_back() -> void:
+	var s: Dictionary = pl[active]
+	var back: Array = s.turn_cards.duplicate()
+	if pick >= 0:
+		back.append(pick)
+	for k in back:
+		var cd: Dictionary = cards[k]
+		if cd.up and not cd.perm:
+			_flip(cd, false)
+			cd.ok = false
+	if not back.is_empty():
+		Audio.play("flip", FX.fr(0.85, 0.95))
+	s.turn_cards = []
+	s.row = 0
+	pick = -1
+	stage = "flipback"
+	next_at = t + FLIP_DUR + 0.25
+	_push_ctrl()
+
+
+## A következő, még nem végzett játékos jön; ha csak egy maradt (vagy elfogytak a menetek), vége.
+func _pass_turn() -> void:
+	pick = -1
+	var left: Array = []
+	for s in pl:
+		if s.fin < 0:
+			left.append(s.i)
+	if left.size() <= (1 if pl.size() > 1 else 0) or turns >= TURN_CAP * pl.size():
+		_finish()
+		return
+	var n := pl.size()
+	for k in range(1, n + 1):
+		var j := (active + k) % n
+		if pl[j].fin < 0:
+			_give_turn(j)
+			return
 
 
 func _finish() -> void:
@@ -585,7 +621,7 @@ func _finish() -> void:
 	for k in idx.size():
 		places[idx[k]] = k
 	var best: Dictionary = pl[idx[0]]
-	print_verbose("[mg] kártyafogó vége: %s" % ", ".join(idx.map(func(k): return "%s(%s) %d pont %.1f mp" % [pl[k].p.name, K.LEVEL_NAME[pl[k].lvl], pl[k].pts, pl[k].time])))
+	print_verbose("[mg] kártyafogó vége (%d menet): %s" % [turns, ", ".join(idx.map(func(k): return "%s(%s) %s %.1f mp" % [pl[k].p.name, K.LEVEL_NAME[pl[k].lvl], _label(pl[k]), pl[k].time]))])
 	_say("🏆 %s nyert!" % best.p.name, Color("#ffd43b"), 3.0)
 	Audio.play("fanfare")
 	if not preview:
@@ -593,8 +629,17 @@ func _finish() -> void:
 	_push_ctrl()
 
 
+## a végzettek a befejezés sorrendjében; a többiek a legjobb menetük, aztán a kevesebb gondolkodási idő szerint
 func _score(s: Dictionary) -> float:
-	return s.pts * 1000.0 - s.time
+	if s.fin >= 0:
+		return 1000000.0 - s.fin * 10000.0
+	return s.best * 1000.0 - s.time
+
+
+func _label(s: Dictionary) -> String:
+	if s.fin >= 0:
+		return "✅ %d. kész · %.1f mp" % [s.fin + 1, s.time]
+	return "%d/%d sor · %.1f mp" % [s.best, ROWS, s.time]
 
 
 func ranking() -> Array:
@@ -602,7 +647,7 @@ func ranking() -> Array:
 	for s in pl:
 		if s.cpu:
 			continue
-		out.append({"pid": s.p.pid, "score": _score(s), "label": "%d ⭐ · %.1f mp" % [s.pts, s.time]})
+		out.append({"pid": s.p.pid, "score": _score(s), "label": _label(s)})
 	out.sort_custom(func(a, b): return a.score > b.score)
 	return out
 
@@ -634,13 +679,13 @@ func _sync(_dt: float) -> void:
 		(cd.sh as Node3D).position = cd.base + Vector3(0.07 + lift * 0.25, -0.015, 0.09 + lift * 0.3)
 		# az inaktív sorok elsötétülnek
 		var lit := 1.0
-		if stage in ["turn", "reveal", "result", "rowwait", "rowend"]:
+		if stage in ["turn", "reveal", "result", "fail"]:
 			lit = 1.0 if cd.r == row_i else 0.42
 		var bm: StandardMaterial3D = cd.back_m
 		var fm: StandardMaterial3D = cd.front_m
 		var target := Color(lit, lit, lit)
 		bm.albedo_color = bm.albedo_color.lerp(target, 0.15)
-		var fl: float = lit if not (cd.taken >= 0 and cd.r != row_i) else max(lit, 0.7)
+		var fl: float = lit if not cd.up else max(lit, 0.85)
 		fm.albedo_color = fm.albedo_color.lerp(Color(fl, fl, fl), 0.15)
 	for rl in row_labels:
 		var on: bool = stage in ["intro", "done"] or rl.r == row_i
@@ -731,9 +776,11 @@ func _draw_players(c: CanvasItem) -> void:
 			name += " · " + K.LEVEL_NAME[s.lvl]
 		D.text(c, name, -6, -28, {"size": 16, "align": "left", "maxw": 96})
 		for k in ROWS:
-			var star := "⭐" if k < s.pts else "☆"
-			D.text(c, star, 6 + k * 28, 6, {"size": 22, "color": Color("#ffe066") if k < s.pts else Color(1, 1, 1, 0.3)})
-		D.text(c, "%.1f mp" % s.time, 30, 36, {"size": 14, "color": Color(1, 1, 1, 0.6)})
+			var got: bool = s.fin >= 0 or (on and k < s.row)
+			var star := "⭐" if got else "☆"
+			D.text(c, star, 6 + k * 28, 6, {"size": 22, "color": Color("#ffe066") if got else Color(1, 1, 1, 0.3)})
+		var sub: String = "✅ %d. kész" % (s.fin + 1) if s.fin >= 0 else "legjobb: %d/%d" % [s.best, ROWS]
+		D.text(c, sub, 30, 36, {"size": 14, "color": Color("#8ce99a") if s.fin >= 0 else Color(1, 1, 1, 0.6)})
 		if rk >= 0 and rk < 1.2:
 			D.emoji(c, "😄" if s.react_ok else "😣", 82, -h / 2 + 4, 30)
 		c.draw_set_transform(Vector2.ZERO)

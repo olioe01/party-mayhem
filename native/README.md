@@ -92,7 +92,7 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 | 🎨 | Festékcsata *(új)* | joystick – amerre jársz, a te színedre vált a padló; vödör = nagy folt | 3D |
 | 🧊 | Olvadó jégtábla *(új)* | joystick – a csempe leszakad alattad, eleinte visszafagy | 3D |
 | 🎁 | Ajándéktorony *(új)* | ◀ ▶ – billegő ajándéktornyot egyensúlyozol: szél, remegés, félidőben plusz doboz, teherautó takarja a képet; a gépen A/D vagy ←/→ az első botot irányítja | 3D |
-| 🃏 | Kártyafogó *(új, max. 4 fő)* | 1–4 gomb – minden sorban mindenkinek egy lapja van; soronként mindenki felfordít egyet, a saját portréd 1 pont, a rossz lap visszafordul (figyeld, mit fordítanak a többiek!); holtversenyben a gyorsabb nyer | 3D |
+| 🃏 | Kártyafogó *(új, max. 4 fő)* | 1–4 gomb – minden sorban mindenkinek egy lapja van; a menetedben előbb az 1. sorban keresed a sajátodat, ha megvan, jöhet a 2., aztán a 3.; ha mellényúlsz, minden lapod visszafordul és legközelebb elölről kezded; aki elsőként megtalálja mind a hármat, nyer (figyeld, mit fordítanak a többiek!) | 3D |
 | 🎆 | Tűzijáték-pumpa *(új, max. 4 fő)* | gyors koppintás 10 mp-ig – a töltés dönti el, milyen magasra száll a rakéta (±2,5% szerencse); a kamera követi az égbe | 3D, éjszakai tér |
 | 🚃 | Sínharc *(új, max. 4 fő)* | joystick – irány a kereszteződésben, hátrahúzva fordulás; TŰZ – lövés; csak a hátsó céltábla sebez, 3 életerő, 60 mp | 3D, várudvar |
 | 🔨 | Vakondvadász *(megújult, max. 8 fő)* | joystick + ÜTÉS (gépen WASD/nyilak + szóköz) – fuss a 3×3 lyukból kibújó vakondhoz és csapj le az óriási játékkalapáccsal: barna +1, arany +3; a kalapács a többieket is elkábítja; 30 mp, a végére egyre több vakond | 3D |
