@@ -56,6 +56,7 @@ func _ready() -> void:
 	_open_web_bundle()
 	_start_servers()
 	addresses = _lan_addresses()
+	print("Party Mayhem: telefonos cím: ", join_url(), "  (minden cím: ", ", ".join(addresses), ")")
 
 
 # ------------------------------------------------------------------ szerverek
@@ -80,6 +81,14 @@ func _lan_addresses() -> PackedStringArray:
 		if name.contains("vethernet") or name.contains("virtual") or name.contains("vmware") or name.contains("docker") \
 				or name.contains("loopback") or name.begins_with("veth") or name.begins_with("br-") or name.contains("wsl") \
 				or name.contains("hyper-v") or name.contains("bluetooth") or name.contains("tailscale") or name.contains("zerotier"):
+			continue
+		# a lecsatlakozott csatoló (pl. kikapcsolt Wi-Fi) Windowson megtarthatja a régi, elavult címét,
+		# de mellé 169.254-es vészcímet kap: az ilyen csatolón nincs valódi kapcsolat, kihagyjuk
+		var stale := false
+		for a in itf.get("addresses", []):
+			if str(a).begins_with("169.254."):
+				stale = true
+		if stale:
 			continue
 		for a in itf.get("addresses", []):
 			var ip := str(a)

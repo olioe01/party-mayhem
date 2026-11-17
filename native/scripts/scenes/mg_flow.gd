@@ -35,6 +35,9 @@ const GAMES := [
 	preload("res://scripts/minigames/mg_barrel.gd"),
 	preload("res://scripts/minigames/mg_storm.gd"),
 	preload("res://scripts/minigames/mg_presents.gd"),
+	preload("res://scripts/minigames/mg_cards.gd"),
+	preload("res://scripts/minigames/mg_launch.gd"),
+	preload("res://scripts/minigames/mg_rails.gd"),
 ]
 
 static var _metas := {}

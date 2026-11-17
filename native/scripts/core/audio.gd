@@ -254,6 +254,15 @@ func _build_sfx() -> void:
 	for i in 9: _tone(b, 150 + (i % 2) * 34, 0.07, "triangle", 0.13, 0, i * 0.075)
 	_store("tremble", b, 3)
 	b = PackedFloat32Array(); _tone(b, 196, 0.5, "saw", 0.05, 70); _tone(b, 392, 0.5, "triangle", 0.05, 120); _store("strain", b, 3)
+	# Kártyafogó, Tűzijáték-pumpa, Sínharc
+	b = PackedFloat32Array(); _noise_burst(b, 0.09, 0.22, 0, 6500); _tone(b, 900, 0.05, "triangle", 0.08, 500, 0.03); _store("flip", b, 4)
+	b = PackedFloat32Array(); _tone(b, 95, 0.08, "square", 0.13, -35); _noise_burst(b, 0.07, 0.2, 0.01, 2200); _tone(b, 300, 0.05, "triangle", 0.07, 160, 0.06); _store("pump", b, 6)
+	b = PackedFloat32Array(); _swell(b, 1.0, 0.36, 2400); _tone(b, 180, 0.8, "saw", 0.05, 900); _noise_burst(b, 0.2, 0.3, 0, 900); _store("launch", b, 4)
+	b = PackedFloat32Array(); _noise_burst(b, 0.9, 0.5, 0, 1100); _tone(b, 75, 0.5, "sine", 0.45, -30)
+	for i in 12: _noise_burst(b, 0.035, 0.18 + (i % 3) * 0.05, 0.25 + i * 0.075 + (i % 4) * 0.012, 7500)
+	_store("firework", b, 4)
+	b = PackedFloat32Array(); _tone(b, 170, 0.11, "square", 0.17, -100); _noise_burst(b, 0.12, 0.32, 0, 2800); _store("cannon", b, 6)
+	b = PackedFloat32Array(); _tone(b, 1480, 0.14, "triangle", 0.12, -260); _tone(b, 2210, 0.1, "sine", 0.06); _noise_burst(b, 0.03, 0.12, 0, 6000); _store("clank", b, 6)
 	var pads := [329.63, 261.63, 392.0, 523.25]
 	for i in 4:
 		b = PackedFloat32Array(); _tone(b, pads[i], 0.4, "triangle", 0.3); _store("pad%d" % i, b)
