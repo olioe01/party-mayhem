@@ -35,7 +35,7 @@ Egyszerre csak egy godot példány fusson (különben a portok 3000/3001-ről 30
 - `scenes/` – `lobby_scene`, `board_scene` (koronavadászat), `mountain_scene` (hegymászás), `mg_flow` (minijáték-keret + a minijátékok preload-listája), `final_scene`.
   Az `mg_flow` `IntroScene`-je az ismertető mellett próbakört futtat egy `SubViewport`-ban (`Minigame.preview`, `Net.practice`, `Main.fx_rect`); a `TestScene` a lobbi „Minijáték teszt” felülete (`G.mg_test`: nincs jutalom, a végén ide tér vissza).
 - `world/` – `board_layout` + `board3d` (szigetek), `mountain_layout` + `mountain3d` (hegy), `chars3d` (figurák, `Chars3D.build(id)`).
-- `minigames/` – `minigame.gd` (`Minigame` ős) + 28 db `mg_<id>.gd` (+ `presents_world.gd`: az Ajándéktorony díszlete, járművei, dobozai).
+- `minigames/` – `minigame.gd` (`Minigame` ős) + 31 db `mg_<id>.gd` (+ `presents_world.gd`: az Ajándéktorony díszlete, járművei, dobozai; `mg_kit.gd`: a Kártyafogó/Tűzijáték-pumpa/Sínharc közös segédei – gépi kitöltő játékosok 4 főig, ezüst óra, helyezéscímke, kar-IK és arckifejezés – a Vakondvadász is használja; `mole_world.gd`: a Vakondvadász tere, lyukai, vakondjai, kalapácsa). Billentyűzetes irányítás opt-in: `keyboard_lr()` (A/D) vagy `keyboard_stick()` (WASD/nyilak + szóköz), mindkettő az első gépi játékos nevében (`main.gd`).
 - `../relay/` – közvetítő szerver az online szobákhoz (Node + `ws`, a Renderen fut). Helyi próba: `PORT=8787 node relay/server.js`, hoszt `--relay=ws://127.0.0.1:8787 --room=TESTA`, vendég `--relay=ws://127.0.0.1:8787 --join=TESTA`.
 - `../web/` – a telefonos kontroller (`js/play.js`, `play.css`); a build `web.zip`-be csomagolja.
 

@@ -37,6 +37,8 @@ func draw(_c: CanvasItem) -> void: pass
 func ranking() -> Array: return []
 ## true: a gépen az A/D és a ←/→ billentyű is ad „lr” bemenetet (az első bot helyett lehet vele játszani)
 func keyboard_lr() -> bool: return false
+## true: a gépen a WASD / nyilak „stick”, a szóköz „btn” bemenetet ad (az első gépi játékos helyett)
+func keyboard_stick() -> bool: return false
 
 
 # ------------------------------------------------------------------ közös 3D segédek

@@ -170,6 +170,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mp := overlay.get_local_mouse_position()
 		Sync.submit({"k": "click", "x": mp.x, "y": mp.y})
 		return
+	if event is InputEventKey and not event.echo and _keyboard_stick(event):
+		return
 	if event is InputEventKey and not event.echo and _keyboard_lr(event):
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -222,6 +224,48 @@ func _keyboard_lr(event: InputEventKey) -> bool:
 			if Net.is_bot(p.pid):
 				Sync.submit({"k": "in", "pid": p.pid, "m": {"t": "lr", "v": dir, "kb": true}})
 				break
+	return true
+
+
+## Billentyűzetes joystick a futós minijátékokban (Minigame.keyboard_stick): WASD / nyilak = „stick”,
+## szóköz = „btn”, az első gépi játékos nevében, a közös eseménysoron át.
+const _KS_DIRS := {KEY_W: Vector2.UP, KEY_UP: Vector2.UP, KEY_S: Vector2.DOWN, KEY_DOWN: Vector2.DOWN,
+	KEY_A: Vector2.LEFT, KEY_LEFT: Vector2.LEFT, KEY_D: Vector2.RIGHT, KEY_RIGHT: Vector2.RIGHT}
+var _ks_keys := {}
+var _ks_vec := Vector2.ZERO
+
+func _keyboard_stick(event: InputEventKey) -> bool:
+	var k: int = event.keycode
+	var act := k == KEY_SPACE
+	if not act and not _KS_DIRS.has(k):
+		return false
+	var inst = scene.get("inst") if scene and not scene.dead else null
+	if inst == null or not is_instance_valid(inst) or not (inst is Minigame) or not inst.keyboard_stick():
+		_ks_keys.clear()
+		_ks_vec = Vector2.ZERO
+		return false
+	var who := ""
+	for p in inst.players:
+		if Net.is_bot(p.pid):
+			who = p.pid
+			break
+	if who == "":
+		return false
+	if act:
+		if event.pressed:
+			Sync.submit({"k": "in", "pid": who, "m": {"t": "btn", "kb": true}})
+		return true
+	if event.pressed:
+		_ks_keys[k] = _KS_DIRS[k]
+	else:
+		_ks_keys.erase(k)
+	var v := Vector2.ZERO
+	for d in _ks_keys.values():
+		v += d
+	v = v.limit_length(1.0)
+	if v != _ks_vec:
+		_ks_vec = v
+		Sync.submit({"k": "in", "pid": who, "m": {"t": "stick", "x": snappedf(v.x, 0.01), "y": snappedf(v.y, 0.01), "kb": true}})
 	return true
 
 

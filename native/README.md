@@ -74,7 +74,7 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 - 🔵🔴 **Csapatos minijátékok:** 4 játékosnál az utolsó mező színe dönti el a csapatokat. Kék mező esetén a kék csapatba, piros mező esetén a piros csapatba kerülsz, az eseménymezők véletlenszerűen osztanak. Így 2 a 2 vagy 1 a 3 ellen is lehet játék.
 - 🏆 **Végén 3 bónusz korona** 7 lehetséges közül (minijáték-mester, vándor, krőzus, pechmadár, kalandor, vásárkirály, barátságos), majd 3D dobogó.
 
-**24 minijáték:**
+**31 minijáték** (válogatás):
 
 | | Név | Irányítás | Megjelenés |
 |---|---|---|---|
@@ -92,6 +92,10 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 | 🎨 | Festékcsata *(új)* | joystick – amerre jársz, a te színedre vált a padló; vödör = nagy folt | 3D |
 | 🧊 | Olvadó jégtábla *(új)* | joystick – a csempe leszakad alattad, eleinte visszafagy | 3D |
 | 🎁 | Ajándéktorony *(új)* | ◀ ▶ – billegő ajándéktornyot egyensúlyozol: szél, remegés, félidőben plusz doboz, teherautó takarja a képet; a gépen A/D vagy ←/→ az első botot irányítja | 3D |
+| 🃏 | Kártyafogó *(új, max. 4 fő)* | 1–4 gomb – minden sorban mindenkinek egy lapja van; soronként mindenki felfordít egyet, a saját portréd 1 pont, a rossz lap visszafordul (figyeld, mit fordítanak a többiek!); holtversenyben a gyorsabb nyer | 3D |
+| 🎆 | Tűzijáték-pumpa *(új, max. 4 fő)* | gyors koppintás 10 mp-ig – a töltés dönti el, milyen magasra száll a rakéta (±2,5% szerencse); a kamera követi az égbe | 3D, éjszakai tér |
+| 🚃 | Sínharc *(új, max. 4 fő)* | joystick – irány a kereszteződésben, hátrahúzva fordulás; TŰZ – lövés; csak a hátsó céltábla sebez, 3 életerő, 60 mp | 3D, várudvar |
+| 🔨 | Vakondvadász *(megújult, max. 8 fő)* | joystick + ÜTÉS (gépen WASD/nyilak + szóköz) – fuss a 3×3 lyukból kibújó vakondhoz és csapj le az óriási játékkalapáccsal: barna +1, arany +3; a kalapács a többieket is elkábítja; 30 mp, a végére egyre több vakond | 3D |
 | 🏗️ | Toronyépítő *(új)* | koppintás – ejtsd a lengő blokkot pontosan a toronyra | 3D |
 | 🎣 | Horgászverseny *(új)* | koppintás, amikor lemerül az úszó; kis hal 1, nagy hal 3, bakancs −1 | 3D |
 | 🔦 | Zseblámpás bújócska *(új, 1 a 3 ellen vagy sorsolt keresővel)* | joystick – a kereső fénykúpja elől a ládák mögé kell bújni | 3D, sötét |
@@ -138,7 +142,8 @@ native/
   scripts/world/                 board_layout (pálya), board3d (3D tábla, kamera), chars3d (18 figura),
                                  mountain_layout + mountain3d (a hegymászás pályája és 3D hegye)
   scripts/scenes/                lobby, board (táblamenet), mountain (hegymászás), mg_flow (minijáték-keret), final
-  scripts/minigames/             a minijátékok (a díszletet külön fájl is adhatja, pl. presents_world.gd)
+  scripts/minigames/             a minijátékok (a díszletet külön fájl is adhatja, pl. presents_world.gd;
+                                 mg_kit.gd: gépi kitöltők, ezüst óra, helyezéscímkék, kar és arc)
   web/                           telefonos kontroller (HTML/JS/CSS + portrék), becsomagolva: web.zip
   music/, tools/                 zenék és a generátoruk
 ```
