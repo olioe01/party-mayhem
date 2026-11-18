@@ -1,6 +1,6 @@
 extends Minigame
 ## Lépcsőverseny – mindenki titokban választ egy számot. Akinek a számát más nem választotta,
-## annyi lépcsőt léphet fel. Legfeljebb 4 játékossal kerül sorra (a meta "max_players" kulcsa miatt).
+## annyi lépcsőt léphet fel. 8 játékosig játszható (sok játékosnál gyakoribb az ütközés – ez a móka).
 
 const GOAL := 12
 const MAX_ROUNDS := 8
@@ -23,7 +23,7 @@ var applied := false
 
 
 func meta() -> Dictionary:
-	return {"id": "stairs", "name": "Lépcsőverseny", "icon": "📶", "color": "#f472b6", "modes": ["ffa"], "max_players": 4,
+	return {"id": "stairs", "name": "Lépcsőverseny", "icon": "📶", "color": "#f472b6", "modes": ["ffa"],
 		"tagline": "Gondolj másra, mint a többiek!",
 		"desc": "Minden körben mindenki titokban választ egy számot 1 és 5 között. Ha a számodat senki más nem választotta, annyi lépcsőfokot léphetsz fel. Ha más is ugyanazt választotta, mindketten a helyeteken maradtok! Az nyer, aki először ér fel a %d. fokra, vagy %d kör után a legmagasabban áll." % [GOAL, MAX_ROUNDS],
 		"controls": "Koppints egy számra. A nagy szám többet ér, de arra mások is vágynak…"}

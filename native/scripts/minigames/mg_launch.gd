@@ -47,7 +47,7 @@ var msg_dur := 1.2
 
 
 func meta() -> Dictionary:
-	return {"id": "launch", "name": "Tűzijáték-pumpa", "icon": "🎆", "color": "#7c3aed", "modes": ["ffa"], "max_players": 4,
+	return {"id": "launch", "name": "Tűzijáték-pumpa", "icon": "🎆", "color": "#7c3aed", "modes": ["ffa"],
 		"tagline": "Pumpáld fel a rakétát!",
 		"desc": "Éjszaka a városi téren mindenki a saját rakétáját pumpálja. Minél jobban feltöltöd a mérőt, annál magasabbra repül a rakétád – és annál nagyobb tűzijáték lesz belőle. A legmagasabbra jutó nyer!",
 		"controls": "10 másodpercig koppints a nagy gombra olyan gyorsan, ahogy csak tudsz! Minden koppintás egy pumpálás."}
@@ -243,7 +243,7 @@ static func _stone_tex() -> ImageTexture:
 
 func _make_station(p, i: int, x: float, cpu: bool, lvl: int) -> Dictionary:
 	var st: Dictionary = METER_STYLE[i % 4]
-	var col := Color(K.SLOT_COLORS[i % 4])
+	var col := Color(K.SLOT_COLORS[i % K.SLOT_COLORS.size()])
 	var g := Chars3D.grp(self, Vector3(x, 0, 0))
 	var metal := Chars3D.mat("#c9d1dc", {"rough": 0.25, "metal": 0.75})
 	var dark_m := Chars3D.mat("#2b3140", {"rough": 0.4, "metal": 0.4})
@@ -896,6 +896,9 @@ func _camera(dt: float) -> void:
 	var H: float = max(h_track, 5.0)
 	var span: float = deg_to_rad(FOV) * 0.82
 	var cz: float = max(9.8, (H - CAM_Y + 1.0) / tan(span) + 1.5)
+	# 4-nél több állomásnál a kamera hátrébb húzódik, hogy mindenki beférjen
+	var half_w: float = (pl.size() - 1) / 2.0 * GAP + 2.2
+	cz = max(cz, half_w / (tan(deg_to_rad(FOV) / 2.0) * 1.7))
 	var a_top := atan2(H - CAM_Y, cz)
 	var a_bot := atan2(-CAM_Y, cz)
 	var pitch := (a_top + a_bot) / 2.0
@@ -923,7 +926,7 @@ func _draw_station_hud(c: CanvasItem, s: Dictionary) -> void:
 	var col: Color = s.col
 	if stage == "pump" or stage == "prep":
 		var sp := screen(Vector3(s.x, 0, 0.9))
-		var w := 176.0
+		var w: float = minf(176.0, 1250.0 / pl.size() - 8.0)
 		var x: float = clamp(sp.x, w / 2 + 6, 1274 - w / 2)
 		D.panel(c, x - w / 2, 640, w, 66, {"r": 18, "fill": Color(0.05, 0.06, 0.16, 0.86), "stroke": col, "lw": 4.0})
 		D.char_image(c, s.p.char_id, x - w / 2 + 26, 660, 38)

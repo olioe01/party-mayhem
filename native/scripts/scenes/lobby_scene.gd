@@ -155,6 +155,8 @@ func key(e: InputEventKey) -> void:
 		go()
 	elif e.keycode == KEY_T:
 		open_test()
+	elif e.keycode == KEY_B:
+		add_bot()
 	elif e.keycode == KEY_J:
 		var mi := 0
 		for i in G.MODES.size():
@@ -166,6 +168,27 @@ func key(e: InputEventKey) -> void:
 		var j := clampi((1 if i < 0 else i) + (1 if e.keycode == KEY_RIGHT else -1), 0, ROUND_OPTIONS.size() - 1)
 		G.max_rounds = ROUND_OPTIONS[j]
 		refresh()
+
+
+## A lobbiban, a játék elején lehet botot adni: ő teljes jogú játékos lesz.
+## (A minijátékok maguktól soha nem töltik fel a helyeket gépi ellenfelekkel.)
+func add_bot() -> void:
+	if G.players.size() >= G.MAX_PLAYERS:
+		return
+	var n := G.players.filter(func(p): return p.is_bot).size() + 1
+	Net.add_bot("Bot %d" % n)
+	Audio.play("pop")
+
+
+func remove_bot() -> void:
+	for i in range(G.players.size() - 1, -1, -1):
+		var b = G.players[i]
+		if b.is_bot:
+			Net.remove_bot(b.pid)
+			G.players.remove_at(i)
+			Game.update_vip()
+			refresh()
+			return
 
 
 func slot_pos(i: int) -> Vector2:
@@ -267,4 +290,6 @@ func draw(c: CanvasItem) -> void:
 	var can := not G.players.is_empty()
 	button(c, 1080, 640, 160, 56, "INDÍTÁS", go, {"color": Color("#51cf66") if can else Color("#555555"), "size": 26})
 	D.text(c, "A ⭐ VIP a telefonjáról is indíthat, ha mindenki kész. Itt: ENTER = indítás", 50, 680, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false, "maxw": 400})
-	D.text(c, "J = játékmód · T = minijáték teszt · F = teljes képernyő · M = hang · P = FPS · O = online", 50, 700, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false})
+	button(c, 855, 645, 110, 46, "+ Bot", add_bot, {"color": Color("#4dabf7"), "size": 20})
+	button(c, 975, 645, 90, 46, "− Bot", remove_bot, {"color": Color("#868e96"), "size": 20})
+	D.text(c, "B = bot · J = játékmód · T = minijáték teszt · F = teljes képernyő · M = hang · P = FPS · O = online", 50, 700, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false})

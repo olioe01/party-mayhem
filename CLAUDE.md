@@ -45,7 +45,7 @@ Egyszerre csak egy godot példány fusson (különben a portok 3000/3001-ről 30
 
 ## Kötelező szabályok új kódnál
 
-- **Nincs gépi játékos (állandó szabály).** Minden minijátékban pontosan annyi résztvevő van, ahány valódi játékos a szobában (1–8); tilos gépi ellenfelet, kitöltőt, üres helyet mutató panelt létrehozni, a felület a `players` listából épül. A `--bots=N` csak fejlesztői tesztkapcsoló; a lecsatlakozott játékos helyett játszó automatika (`Net.away`) megmaradhat.
+- **A minijátékok nem töltik fel magukat gépi ellenféllel (állandó szabály).** Minden minijátékban pontosan annyi résztvevő van, ahány játékos a játékban van (1–8): ha ketten játszanak, ketten vannak a minijátékban is. Tilos kitöltő gépi ellenfelet vagy üres helyet mutató panelt létrehozni; a felület a `players` listából épül, és minden minijáték 8 főig játszható. A lobbiban viszont a játék elején **lehet** botot hozzáadni („+ Bot” gomb, `B`): ő rendes játékos lesz. A lecsatlakozott játékos helyett játszó automatika (`Net.away`) is megmaradhat.
 - Az eredményképernyő (`MgFlow.ResultScene`) közös: ha változik, minden minijáték után ugyanúgy változzon. Minijáték-szintű kapcsolók a `meta()`-ban: `"keep_ties": true` (holtverseny marad, nincs kockadobás), `"own_end": true` (a minijáték saját befejező feliratot rajzol, a „VÉGE!” elmarad).
 
 Az online mód determinisztikus lockstep; ezek megszegése szétcsúsztatja a gépeket:

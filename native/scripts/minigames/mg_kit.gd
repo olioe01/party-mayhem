@@ -5,8 +5,8 @@ extends RefCounted
 const W = preload("res://scripts/minigames/presents_world.gd")
 const Presents = preload("res://scripts/minigames/mg_presents.gd")
 
-## a négy hely saját színe (kék, piros, zöld, narancs)
-const SLOT_COLORS := ["#2f80ff", "#f03e3e", "#2fb344", "#ff8c1a"]
+## a helyek saját színe (kék, piros, zöld, narancs, lila, türkiz, rózsaszín, sárga) – 8 játékosig
+const SLOT_COLORS := ["#2f80ff", "#f03e3e", "#2fb344", "#ff8c1a", "#9b5de5", "#13b5c8", "#f0609e", "#d9a400"]
 const PLACE_COLORS := ["#ffd43b", "#dee2e6", "#f4a261", "#9aa5b1"]
 const PLACE_DARK := ["#b35c00", "#495057", "#8a4b14", "#3d4752"]
 const PLACE_TEXT := ["1.", "2.", "3.", "4."]
@@ -45,6 +45,7 @@ static func silver_timer(c: CanvasItem, remain: float, x := 640.0, y := 46.0, lo
 static func place_label(c: CanvasItem, place: int, x: float, y: float, k := 1.0, size := 64) -> void:
 	if k <= 0.0:
 		return
+	var txt: String = PLACE_TEXT[place] if place <= 3 else "%d." % (place + 1)
 	place = clampi(place, 0, 3)
 	var s := D.ease_out_back(clamp(k, 0.0, 1.0))
 	c.draw_set_transform(Vector2(x, y), sin(k * 9.0) * 0.06 * (1.0 - min(1.0, k)), Vector2(s, s))
@@ -52,8 +53,8 @@ static func place_label(c: CanvasItem, place: int, x: float, y: float, k := 1.0,
 	var dark := Color(PLACE_DARK[place])
 	# kihúzott „mélység”: több eltolt, sötét réteg, rajta a világos lap
 	for i in range(5, 0, -1):
-		D.text(c, PLACE_TEXT[place], i * 1.4, i * 2.0, {"size": size, "color": dark, "stroke": D.DARK, "sw": 10})
-	D.text(c, PLACE_TEXT[place], 0, 0, {"size": size, "color": col, "stroke": Color.WHITE, "sw": 6})
+		D.text(c, txt, i * 1.4, i * 2.0, {"size": size, "color": dark, "stroke": D.DARK, "sw": 10})
+	D.text(c, txt, 0, 0, {"size": size, "color": col, "stroke": Color.WHITE, "sw": 6})
 	c.draw_set_transform(Vector2.ZERO)
 
 

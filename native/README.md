@@ -12,6 +12,7 @@ Ez a Party Mayhem önálló, telepítés nélkül futtatható változata, Godot 
 |---|---|
 | `F` / `F11` | teljes képernyő |
 | `M` | hang ki/be |
+| `B` | bot hozzáadása (lobby) |
 | `J` | játékmód váltása (lobby) |
 | `T` | minijáték teszt: a minijátékok tét nélkül kipróbálhatók (lobby) |
 | `←` `→` | körök száma (lobby) |
@@ -83,7 +84,7 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 
 **31 minijáték** (válogatás):
 
-Minden minijátékban pontosan annyian vesznek részt, ahány valódi játékos a szobában van (1 fő is játszhat); gépi kitöltő ellenfél nincs. A közös eredményképernyőn bal oldalt a lista, jobb oldalt 3D-s talapzatokon a figurák: a győztes ugrál és a magasba emeli a karját, az utolsó lehajtott fejjel szomorkodik.
+Minden minijátékban pontosan annyian vesznek részt, ahány játékos a játékban van (1–8 fő, minden minijáték 8 főig játszható); a minijátékok soha nem töltik fel magukat gépi ellenféllel. A lobbiban a játék elején a „+ Bot” gombbal (vagy a `B` billentyűvel) lehet botot adni – ő rendes játékosként vesz részt. A közös eredményképernyőn bal oldalt a lista, jobb oldalt 3D-s talapzatokon a figurák: a győztes ugrál és a magasba emeli a karját, az utolsó lehajtott fejjel szomorkodik.
 
 | | Név | Irányítás | Megjelenés |
 |---|---|---|---|
@@ -101,9 +102,9 @@ Minden minijátékban pontosan annyian vesznek részt, ahány valódi játékos 
 | 🎨 | Festékcsata *(új)* | joystick – amerre jársz, a te színedre vált a padló; vödör = nagy folt | 3D |
 | 🧊 | Olvadó jégtábla *(új)* | joystick – a csempe leszakad alattad, eleinte visszafagy | 3D |
 | 🎁 | Ajándéktorony *(új)* | ◀ ▶ – billegő ajándéktornyot egyensúlyozol: szél, remegés, félidőben plusz doboz, teherautó takarja a képet; a gépen A/D vagy ←/→ az első játékost irányítja | 3D |
-| 🃏 | Kártyafogó *(új, max. 4 fő)* | 1–4 gomb – minden sorban mindenkinek egy lapja van; a menetedben előbb az 1. sorban keresed a sajátodat, ha megvan, jöhet a 2., aztán a 3.; ha mellényúlsz, minden lapod visszafordul és legközelebb elölről kezded; aki elsőként megtalálja mind a hármat, nyer (figyeld, mit fordítanak a többiek!) | 3D |
-| 🎆 | Tűzijáték-pumpa *(új, max. 4 fő)* | gyors koppintás 10 mp-ig – a töltés dönti el, milyen magasra száll a rakéta (±2,5% szerencse); a kamera követi az égbe | 3D, éjszakai tér |
-| 🚃 | Sínharc *(új, max. 4 fő)* | joystick – irány a kereszteződésben, hátrahúzva fordulás; TŰZ – lövés; csak a hátsó céltábla sebez, 3 életerő, 60 mp | 3D, várudvar |
+| 🃏 | Kártyafogó *(új, 8 főig: soronként annyi lap, ahány játékos)* | 1–4 gomb – minden sorban mindenkinek egy lapja van; a menetedben előbb az 1. sorban keresed a sajátodat, ha megvan, jöhet a 2., aztán a 3.; ha mellényúlsz, minden lapod visszafordul és legközelebb elölről kezded; aki elsőként megtalálja mind a hármat, nyer (figyeld, mit fordítanak a többiek!) | 3D |
+| 🎆 | Tűzijáték-pumpa *(új, 8 főig)* | gyors koppintás 10 mp-ig – a töltés dönti el, milyen magasra száll a rakéta (±2,5% szerencse); a kamera követi az égbe | 3D, éjszakai tér |
+| 🚃 | Sínharc *(új, 8 főig)* | joystick – irány a kereszteződésben, hátrahúzva fordulás; TŰZ – lövés; csak a hátsó céltábla sebez, 3 életerő, 60 mp | 3D, várudvar |
 | 🌩️ | Viharpadló *(megújult)* | joystick (gépen WASD/nyilak) – a magasban lebegő platform bal fele PIROS, jobb fele KÉK; 5 mp alatt állj arra, amelyik szerinted megmarad; az egyik fele (fele-fele eséllyel) csapóajtóként lenyílik, aki rajta áll, lezuhan és ⚡ villámot kap; 3 kör, a legkevesebb villám nyer, holtversenyben azonos helyezés | 3D, óceán fölött, erősödő vihar |
 | 🔨 | Vakondvadász *(megújult, max. 8 fő)* | joystick + ÜTÉS (gépen WASD/nyilak + szóköz) – fuss a 3×3 lyukból kibújó vakondhoz és csapj le az óriási játékkalapáccsal: barna +1, arany +3; a kalapács a többieket is elkábítja; 30 mp, a végére egyre több vakond | 3D |
 | 🏗️ | Toronyépítő *(új)* | koppintás – ejtsd a lengő blokkot pontosan a toronyra | 3D |

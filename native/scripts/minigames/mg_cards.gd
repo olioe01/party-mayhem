@@ -9,11 +9,10 @@ extends Minigame
 const K = preload("res://scripts/minigames/mg_kit.gd")
 
 const ROWS := 3
-const COLS := 4
 const CARD_W := 1.2
 const CARD_L := 1.6
 const CARD_T := 0.035
-const COL_X := [-2.4, -0.8, 0.8, 2.4]
+const COL_GAP := 1.6
 const ROW_Z := [-2.15, 0.0, 2.15]
 const TURN_TIME := 10.0
 const FLIP_DUR := 0.5
@@ -54,7 +53,7 @@ var row_labels: Array = []
 
 
 func meta() -> Dictionary:
-	return {"id": "cards", "name": "Kártyafogó", "icon": "🃏", "color": "#c2255c", "modes": ["ffa"], "max_players": 4,
+	return {"id": "cards", "name": "Kártyafogó", "icon": "🃏", "color": "#c2255c", "modes": ["ffa"],
 		"tagline": "Találd meg mind a három lapodat!",
 		"desc": "Tizenkét lefordított lap fekszik az asztalon: minden sorban mindenkinek pontosan egy lapja van. Ha rád kerül a sor, előbb az 1. sorban keresed a sajátodat – ha megvan, jöhet a 2., aztán a 3. sor. Ha bármelyiknél mellényúlsz, minden lapod visszafordul, és legközelebb elölről kezded. Aki elsőként találja meg mind a hármat, nyer – figyeld, mit fordítanak fel a többiek!",
 		"controls": "Amikor rád kerül a sor, lapponként 10 másodperced van: nyomd meg az aktuális sorod 1–4. lapjának gombját."}
@@ -64,15 +63,34 @@ func layout(p) -> Dictionary:
 	return _ctrl_for(p)
 
 
+var cols := 4                     # soronként ennyi lap: a játékosok száma, de legalább 4
+
+
+## a c. oszlop x helye (a lapok középre rendezve)
+func _col_x(c: int) -> float:
+	return (c - (cols - 1) / 2.0) * _gap()
+
+
+func _gap() -> float:
+	return COL_GAP if cols <= 4 else 1.45
+
+
+## az asztal fél szélessége (a lapok + szegély)
+func _half_w() -> float:
+	return maxf(5.3, (cols - 1) / 2.0 * _gap() + CARD_W / 2.0 + 1.6)
+
+
 # ------------------------------------------------------------------ felépítés
 func _ready() -> void:
+	cols = maxi(4, players.size())
 	make_env("#0c1f16", "#1d3b2a", 0.55)
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color("#0d1a14")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color("#b9d8c4")
 	env.ambient_light_energy = 0.55
-	make_camera(Vector3(0.0, 10.6, 3.6), Vector3(0.0, 0.0, 0.25), 42)
+	var cam_k := maxf(1.0, _half_w() / 5.3)
+	make_camera(Vector3(0.0, 10.6 * cam_k, 3.6 * cam_k), Vector3(0.0, 0.0, 0.25), 42)
 	var sun := make_sun(Vector3(-62, -18, 0), 1.25, "#fff4e0")
 	sun.shadow_blur = 3.0
 	var lamp := OmniLight3D.new()
@@ -91,7 +109,7 @@ func _ready() -> void:
 		if cpu or p.is_bot:
 			lvl = K.ai_level(ai_k)
 			ai_k += 1
-		pl.append({"p": p, "cpu": cpu, "i": i, "col": Color(K.SLOT_COLORS[i % 4]), "row": 0, "best": 0, "fin": -1, "turn_cards": [], "miss": 0, "time": 0.0,
+		pl.append({"p": p, "cpu": cpu, "i": i, "col": Color(K.SLOT_COLORS[i % K.SLOT_COLORS.size()]), "row": 0, "best": 0, "fin": -1, "turn_cards": [], "miss": 0, "time": 0.0,
 			"lvl": lvl, "mem": {}, "think": 0.0, "react_t": -10.0, "react_ok": false})
 	_deal()
 	_sync(0.0)
@@ -103,15 +121,16 @@ func _build_table() -> void:
 	var felt := Chars3D.mat("#1f6b3e", {"rough": 1.0})
 	var wood := Chars3D.mat("#7a4a26", {"rough": 0.55})
 	var wood_l := Chars3D.mat("#a0663a", {"rough": 0.5})
-	Chars3D.box(self, 10.6, 0.5, 7.9, wood, Vector3(0, -0.27, 0.15))
-	Chars3D.box(self, 10.0, 0.06, 7.3, felt, Vector3(0, 0.0, 0.15))
+	var hw := _half_w()
+	Chars3D.box(self, hw * 2.0, 0.5, 7.9, wood, Vector3(0, -0.27, 0.15))
+	Chars3D.box(self, hw * 2.0 - 0.6, 0.06, 7.3, felt, Vector3(0, 0.0, 0.15))
 	# a filc finom mintája: sötétebb csíkok, hogy ne legyen egyszínű
 	var felt_d := Chars3D.mat("#1a5e36", {"rough": 1.0})
 	for i in 9:
-		Chars3D.box(self, 10.0, 0.005, 0.32, felt_d, Vector3(0, 0.032, -3.3 + i * 0.86))
+		Chars3D.box(self, hw * 2.0 - 0.6, 0.005, 0.32, felt_d, Vector3(0, 0.032, -3.3 + i * 0.86))
 	for s in [-1, 1]:
-		Chars3D.box(self, 10.7, 0.18, 0.32, wood_l, Vector3(0, 0.06, 0.15 + s * 3.8))
-		Chars3D.box(self, 0.32, 0.18, 7.9, wood_l, Vector3(s * 5.2, 0.06, 0.15))
+		Chars3D.box(self, hw * 2.0 + 0.1, 0.18, 0.32, wood_l, Vector3(0, 0.06, 0.15 + s * 3.8))
+		Chars3D.box(self, 0.32, 0.18, 7.9, wood_l, Vector3(s * (hw - 0.1), 0.06, 0.15))
 	# sorszámok mindkét oldalon
 	for r in ROWS:
 		for s in [-1, 1]:
@@ -123,7 +142,7 @@ func _build_table() -> void:
 			lb.modulate = Color("#ffe066")
 			lb.outline_modulate = Color("#3b1a00")
 			lb.rotation = Vector3(-PI / 2, 0, 0)
-			lb.position = Vector3(s * 3.95, 0.05, ROW_Z[r])
+			lb.position = Vector3(s * (_col_x(cols - 1) + CARD_W / 2.0 + 0.95), 0.05, ROW_Z[r])
 			add_child(lb)
 			row_labels.append({"n": lb, "r": r})
 	# kiemelő keret a kurzor alatti lapnak
@@ -142,12 +161,12 @@ func _build_table() -> void:
 	add_child(glow)
 
 
-## Lapok kiosztása: minden sor a négy játékos egy-egy lapja, soronként külön keverve.
+## Lapok kiosztása: minden sorban mindenkinek egy lapja van (4-nél kevesebb játékosnál több is), soronként külön keverve.
 func _deal() -> void:
 	var owners: Array = []
 	for r in ROWS:
 		var row: Array = []
-		for k in COLS:
+		for k in cols:
 			row.append(k % pl.size())
 		for k in range(row.size() - 1, 0, -1):
 			var j := randi() % (k + 1)
@@ -159,9 +178,9 @@ func _deal() -> void:
 	var edge := Chars3D.mat("#f8f4ea", {"rough": 0.35})
 	var shadow_m := Chars3D.mat("#000000", {"alpha": 0.32, "unshaded": true})
 	for k in owners.size():
-		var r := k / COLS
-		var c := k % COLS
-		var base := Vector3(COL_X[c], 0.05, ROW_Z[r])
+		var r := k / cols
+		var c := k % cols
+		var base := Vector3(_col_x(c), 0.05, ROW_Z[r])
 		var sh := MeshInstance3D.new()
 		var sq := QuadMesh.new()
 		sq.size = Vector2(CARD_W * 1.04, CARD_L * 1.04)
@@ -355,8 +374,8 @@ func _ctrl_for(p) -> Dictionary:
 	var si := _slot_of(p)
 	if stage == "turn" and si == active:
 		var cells: Array = []
-		for c in COLS:
-			var cd: Dictionary = cards[row_i * COLS + c]
+		for c in cols:
+			var cd: Dictionary = cards[row_i * cols + c]
 			cells.append("" if cd.up else "🃏 %d" % (c + 1))
 		return {"mode": "grid", "cols": 4, "title": "%d. sor – melyik a te lapod?" % (row_i + 1), "cells": cells}
 	if si >= 0 and pl[si].fin >= 0:
@@ -394,9 +413,9 @@ func input(p, msg: Dictionary) -> void:
 	if si != active:
 		return
 	var c := int(msg.get("v", -1))
-	if c < 0 or c >= COLS:
+	if c < 0 or c >= cols:
 		return
-	_choose(row_i * COLS + c)
+	_choose(row_i * cols + c)
 
 
 func bot(p, dt: float) -> void:
@@ -412,8 +431,8 @@ func _ai(s: Dictionary, _dt: float) -> void:
 	if t - turn_t0 < s.think:
 		return
 	var free: Array = []
-	for c in COLS:
-		var k: int = row_i * COLS + c
+	for c in cols:
+		var k: int = row_i * cols + c
 		if not cards[k].up:
 			free.append(k)
 	if free.is_empty():
@@ -700,9 +719,9 @@ func _cursor_step() -> void:
 	if stage == "turn":
 		if t >= hover_next:
 			var free: Array = []
-			for c in COLS:
-				if not cards[row_i * COLS + c].up:
-					free.append(row_i * COLS + c)
+			for c in cols:
+				if not cards[row_i * cols + c].up:
+					free.append(row_i * cols + c)
 			if not free.is_empty():
 				hover_card = free[int(FX.f() * free.size()) % free.size()]
 			hover_next = t + FX.fr(0.45, 0.9)
@@ -746,9 +765,10 @@ func draw(c: CanvasItem) -> void:
 func _draw_players(c: CanvasItem) -> void:
 	var n := pl.size()
 	var h := 112.0
-	var y0 := 360.0 - (n * h + (n - 1) * 10) / 2.0
+	var hs: float = minf(1.0, 690.0 / (n * (h + 10) - 10))    # 5–8 játékosnál kisebb kártyák
+	var y0 := 360.0 - (n * (h + 10) - 10) * hs / 2.0
 	for s in pl:
-		var y: float = y0 + s.i * (h + 10) + h / 2
+		var y: float = y0 + s.i * (h + 10) * hs + h * hs / 2
 		var on: bool = s.i == active
 		var rk: float = t - s.react_t
 		var x := 22.0
@@ -761,7 +781,7 @@ func _draw_players(c: CanvasItem) -> void:
 				sc += sin(rk / 0.6 * PI) * 0.12
 			else:
 				x += sin(rk * 40.0) * 8.0 * (1.0 - rk / 0.6)
-		c.draw_set_transform(Vector2(x + 95, y), 0, Vector2(sc, sc))
+		c.draw_set_transform(Vector2(x + 95 * hs, y), 0, Vector2(sc * hs, sc * hs))
 		var col: Color = s.col
 		if on:
 			D.panel(c, -101, -h / 2 - 6, 202, h + 12, {"r": 22, "fill": Color(col, 0.35 + 0.25 * abs(sin(t * 5.0))), "stroke": null, "shadow": false})
@@ -784,8 +804,8 @@ func _draw_players(c: CanvasItem) -> void:
 			D.emoji(c, "😄" if s.react_ok else "😣", 82, -h / 2 + 4, 30)
 		c.draw_set_transform(Vector2.ZERO)
 		if on and stage == "turn":
-			var ax := 228.0 + sin(t * 8.0) * 5.0
+			var ax := 22.0 + 206.0 * hs + sin(t * 8.0) * 5.0
 			c.draw_colored_polygon(PackedVector2Array([Vector2(ax, y), Vector2(ax + 20, y - 14), Vector2(ax + 20, y + 14)]), Color.WHITE)
 		if stage == "done" and places.has(s.i):
-			var k: float = (t - done_t - 0.4 - (3 - places[s.i]) * 0.25) * 2.5
-			K.place_label(c, places[s.i], x + 168, y + 4, k, 50)
+			var k: float = (t - done_t - 0.4 - (pl.size() - 1 - places[s.i]) * 0.25) * 2.5
+			K.place_label(c, places[s.i], x + 168 * hs, y + 4, k, int(50 * maxf(hs, 0.7)))

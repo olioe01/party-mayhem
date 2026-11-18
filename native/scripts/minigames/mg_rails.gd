@@ -23,8 +23,9 @@ const REAR_DOT := -0.25           # ennél „hátulsóbb” becsapódás talál
 const INVULN := 0.6
 const WALL_X := 9.95
 const WALL_Z := 6.45
-const VEH_COLS := ["#2f80ff", "#f03e3e", "#2fb344", "#fcc419"]
-const START := [[0, 1], [3, 7], [11, 10], [8, 4]]
+const VEH_COLS := ["#2f80ff", "#f03e3e", "#2fb344", "#fcc419", "#9b5de5", "#13b5c8", "#f0609e", "#ff8c1a"]
+## kezdőhelyek (sín két végpontja); 4 főig a külső kör négy sarka, utána a belső keresztutak is
+const START := [[0, 1], [3, 7], [11, 10], [8, 4], [5, 6], [6, 10], [9, 5], [2, 1]]
 const AI_THINK := [0.5, 0.28, 0.12]
 const AI_AIM := [0.34, 0.21, 0.11]
 const AI_REV_CD := [3.5, 2.0, 1.2]
@@ -50,7 +51,7 @@ var msg_dur := 1.2
 
 
 func meta() -> Dictionary:
-	return {"id": "rails", "name": "Sínharc", "icon": "🚃", "color": "#2f80ff", "modes": ["ffa"], "max_players": 4,
+	return {"id": "rails", "name": "Sínharc", "icon": "🚃", "color": "#2f80ff", "modes": ["ffa"],
 		"tagline": "Lődd hátba a többieket!",
 		"desc": "Kis ágyús kocsikkal száguldoztok a várudvar sínjein. Elölről páncél véd, de hátul mindenkinek céltábla van: azt kell eltalálni! Három találat és kiestél. 60 másodperc után a több életerő nyer.",
 		"controls": "A joystickkal választod ki, merre fordulj a kereszteződésben (hátrahúzva megfordulsz), a TŰZ gombbal lősz. A hedge-sövény és a fal elnyeli a lövést."}
@@ -415,7 +416,7 @@ func _spark(pos: Vector3, cols: Array, n := 26, speed := 1.0) -> void:
 
 
 func _make_vehicle(p, i: int, cpu: bool, lvl: int) -> Dictionary:
-	var col := Color(VEH_COLS[i % 4])
+	var col := Color(VEH_COLS[i % VEH_COLS.size()])
 	var root := Chars3D.grp(self)
 	root.scale = Vector3.ONE * VEH_SCALE
 	var body := Chars3D.grp(root)
@@ -1052,8 +1053,8 @@ func draw(c: CanvasItem) -> void:
 
 func _draw_hud(c: CanvasItem) -> void:
 	var n := pl.size()
-	var w := 236.0
 	var gap := 12.0
+	var w: float = minf(236.0, (1250.0 - (n - 1) * gap) / n)
 	var x0 := 640.0 - (n * w + (n - 1) * gap) / 2.0
 	for s in pl:
 		var x: float = x0 + s.i * (w + gap)
