@@ -194,7 +194,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 ## Billentyűzetes irányítás az ezt kérő minijátékokban (Minigame.keyboard_lr): az A/D és a ←/→
-## ugyanazt az „lr” bemenetet adja, mint a telefon ◀ ▶ gombja, az első gépi játékos nevében.
+## ugyanazt az „lr” bemenetet adja, mint a telefon ◀ ▶ gombja (lásd _kb_target).
 ## A bemenet a közös eseménysoron megy át, így a lépésütemet nem bontja meg.
 var _kb_keys := {}
 var _kb_dir := 0
@@ -220,15 +220,25 @@ func _keyboard_lr(event: InputEventKey) -> bool:
 	dir = clampi(dir, -1, 1)
 	if dir != _kb_dir:
 		_kb_dir = dir
-		for p in inst.players:
-			if Net.is_bot(p.pid):
-				Sync.submit({"k": "in", "pid": p.pid, "m": {"t": "lr", "v": dir, "kb": true}})
-				break
+		var who := _kb_target(inst)
+		if who != "":
+			Sync.submit({"k": "in", "pid": who, "m": {"t": "lr", "v": dir, "kb": true}})
 	return true
 
 
+## Kit irányít a gép billentyűzete: fejlesztői tesztbotot, ha van, különben az első játékost
+## (online vendéggépen senkit, hogy ne vehesse át a hoszt játékosát).
+func _kb_target(inst) -> String:
+	for p in inst.players:
+		if Net.is_bot(p.pid):
+			return p.pid
+	if Sync.client or inst.players.is_empty():
+		return ""
+	return inst.players[0].pid
+
+
 ## Billentyűzetes joystick a futós minijátékokban (Minigame.keyboard_stick): WASD / nyilak = „stick”,
-## szóköz = „btn”, az első gépi játékos nevében, a közös eseménysoron át.
+## szóköz = „btn”, a _kb_target játékos nevében, a közös eseménysoron át.
 const _KS_DIRS := {KEY_W: Vector2.UP, KEY_UP: Vector2.UP, KEY_S: Vector2.DOWN, KEY_DOWN: Vector2.DOWN,
 	KEY_A: Vector2.LEFT, KEY_LEFT: Vector2.LEFT, KEY_D: Vector2.RIGHT, KEY_RIGHT: Vector2.RIGHT}
 var _ks_keys := {}
@@ -244,11 +254,7 @@ func _keyboard_stick(event: InputEventKey) -> bool:
 		_ks_keys.clear()
 		_ks_vec = Vector2.ZERO
 		return false
-	var who := ""
-	for p in inst.players:
-		if Net.is_bot(p.pid):
-			who = p.pid
-			break
+	var who := _kb_target(inst)
 	if who == "":
 		return false
 	if act:

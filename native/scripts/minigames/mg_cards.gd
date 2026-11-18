@@ -83,7 +83,6 @@ func _ready() -> void:
 	add_child(lamp)
 	_build_table()
 	var all := players.duplicate()
-	all.append_array(K.fill_cpu(players))
 	var ai_k := 0
 	for i in all.size():
 		var p = all[i]

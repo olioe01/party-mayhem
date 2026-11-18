@@ -43,13 +43,18 @@ const SHOP_ITEMS := ["double", "triple", "thief", "warp", "golden"]
 const MODES := [
 	{"id": "crown", "icon": "👑", "name": "Koronavadászat", "desc": "Gyűjts érmét, vegyél koronát – a legtöbb korona nyer"},
 	{"id": "mountain", "icon": "⛰️", "name": "Hegymászás", "desc": "Körbe-körbe fel a hegyre – aki először ér a csúcsra, nyer"},
+	{"id": "highway", "icon": "🛣️", "name": "Óceánsztráda", "desc": "351 mező az óceán fölött – a minijáték osztja a kockákat, a célkapunál 10 kockával kell nagyot dobni"},
 ]
 
 var phase := "lobby"
 var mode := "crown"              # "crown" (szigetek, koronák) | "mountain" (hegymászás)
 var mountain = null              # MountainLayout szótár (csak hegymászásnál)
 var mtn_order: Array = []        # a körön belüli sorrend (az utolsó minijáték helyezései szerint)
-var mtn_winner = null
+var mtn_winner = null            # hegymászás és Óceánsztráda: aki elsőként célba ért
+var hw_duel := ""                # Óceánsztráda: aki „1 a többiek ellen” mezőre lépett (a kör végén párbaj)
+var hw_duel_now := false         # a mostani minijáték a párbaj
+var hw_bonus: Array = []         # [{pid, n}]: a párbaj után járó bónuszkockák
+var hw_choose := false           # a 200-as kapu után az utolsó helyezett választ minijátékot
 var players: Array = []          # PlayerData
 var max_rounds := 10
 var round := 1
@@ -84,8 +89,17 @@ class PlayerData:
 	var dice: Array = [6]         # hegymászás: a következő dobás kockái (oldalszámok), pl. [6, 4]
 	var frozen := false           # hegymászás: kimarad a következő dobásból
 	var mg_place := 0             # hegymászás: az utolsó minijáték helyezése (0 = első)
+	var hw_dice := 0              # Óceánsztráda: ennyi kockával dob ebben a körben
+	var hw_total := 0             # … a legutóbbi dobás összege
+	var hw_cp := 0                # … ennyi ellenőrzőponton (100, 200) jutott át
+	var hw_final := 0             # … ennyiszer bukott el a célkapunál
+	var hw_lane := 0              # … melyik sávban fut
 
 	func reset() -> void:
+		hw_dice = 0
+		hw_total = 0
+		hw_cp = 0
+		hw_final = 0
 		dice = [6]
 		frozen = false
 		mg_place = 0
@@ -169,11 +183,28 @@ func status_of(pid: String):
 		"items": icons, "playing": phase != "lobby"}
 	if mode == "mountain" and mountain != null:
 		d["stats"] = "⛰️ %d/%d   %s" % [p.node, mountain.goal, dice_text(p.dice)]
+	elif mode == "highway" and phase != "lobby":
+		d["stats"] = "🛣️ %d/%d   🎲×%d" % [p.node, HighwayLayout.GOAL, p.hw_dice]
 	return d
 
 
 func is_mountain() -> bool:
 	return mode == "mountain"
+
+
+func is_highway() -> bool:
+	return mode == "highway"
+
+
+## versenymód: aki előbb ér célba (hegymászás, Óceánsztráda) – nincs érme, korona, bónusz
+func is_race() -> bool:
+	return mode == "mountain" or mode == "highway"
+
+
+func race_goal() -> int:
+	if is_highway():
+		return HighwayLayout.GOAL
+	return mountain.goal if mountain != null else 0
 
 
 func mode_info() -> Dictionary:
@@ -211,7 +242,7 @@ func add_coins(p: PlayerData, n: int) -> int:
 
 func standings() -> Array:
 	var s := players.duplicate()
-	if is_mountain():
+	if is_race():
 		s.sort_custom(func(a, b): return a.node > b.node or (a.node == b.node and a.stats.mg_wins > b.stats.mg_wins))
 		if mtn_winner and s.has(mtn_winner):
 			s.erase(mtn_winner)
@@ -223,7 +254,7 @@ func standings() -> Array:
 
 func place_of(p: PlayerData) -> int:
 	var s := standings()
-	if is_mountain():
+	if is_race():
 		if p == mtn_winner:
 			return 1
 		for i in s.size():

@@ -73,7 +73,6 @@ func _ready() -> void:
 	_build_rails()
 	_build_pools()
 	var all := players.duplicate()
-	all.append_array(K.fill_cpu(players))
 	var ai_k := 0
 	for i in all.size():
 		var p = all[i]

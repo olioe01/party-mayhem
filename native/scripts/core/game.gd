@@ -63,6 +63,7 @@ func after_boot(args: PackedStringArray) -> void:
 		elif a.begins_with("--quit-at="):
 			var q := float(a.get_slice("=", 1))
 			get_tree().create_timer(q, true, false, true).timeout.connect(func(): get_tree().quit())
+	# --bots=N csak fejlesztői tesztkapcsoló (fej nélküli próbafuttatás); a játékban nincs gépi játékos
 	for i in nb:
 		Net.add_bot("Bot %d" % (i + 1))
 	if mgtest_auto:
@@ -213,6 +214,24 @@ func start_game() -> void:
 	G.mtn_winner = null
 	G.mountain = null
 	G.team_split = []
+	G.hw_duel = ""
+	G.hw_duel_now = false
+	G.hw_bonus = []
+	G.hw_choose = false
+	if G.is_highway():
+		G.hw_choose = test_start_node > HighwayLayout.CP_LIGHTS
+		G.mtn_order = G.players.duplicate()
+		for i in G.players.size():
+			var p = G.players[i]
+			p.hw_lane = i
+			p.node = clampi(test_start_node, 0, HighwayLayout.GOAL - 1)
+			p.hw_cp = (1 if p.node > HighwayLayout.CP_BRIDGE else 0) + (1 if p.node > HighwayLayout.CP_LIGHTS else 0)
+			p.hw_dice = 10
+		if force_mg != "":
+			Main.I.set_scene(MgFlow.SelectScene.new(force_mg))
+			return
+		Main.I.set_scene(HighwayScene.new(true))
+		return
 	if G.is_mountain():
 		G.mountain = MountainLayout.build()
 		if test_tiles != "":
@@ -242,6 +261,9 @@ func after_minigame() -> void:
 	if G.is_mountain():
 		# hegymászásnál a kör a minijátékkal kezdődik, utána jön a dobás
 		Main.I.set_scene(MountainScene.new(false))
+		return
+	if G.is_highway():
+		Main.I.set_scene(HighwayScene.new(false))
 		return
 	G.round += 1
 	if G.round > G.max_rounds:

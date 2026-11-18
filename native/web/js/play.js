@@ -165,14 +165,14 @@ function connectHost() {
           <div class="vip">
             <h3>⭐ Te vagy a VIP</h3>
             <div class="modes">${(l.gameModes || []).map((m) => `<button data-m="${esc(m.id)}" class="${m.id === l.gameMode ? 'sel' : ''}">${esc(m.icon)} ${esc(m.name)}</button>`).join('')}</div>
-            ${l.gameMode === 'mountain'
-              ? '<p class="muted">Az első nyer, aki felér a csúcsra</p>'
+            ${l.gameMode === 'mountain' || l.gameMode === 'highway'
+              ? `<p class="muted">${l.gameMode === 'highway' ? 'Az első nyer, aki átjut a célkapun' : 'Az első nyer, aki felér a csúcsra'}</p>`
               : `<div class="rounds">${l.roundOptions.map((r) => `<button data-r="${r}" class="${r === l.rounds ? 'sel' : ''}">${r} kör</button>`).join('')}</div>`}
             <button class="start" id="start" ${l.canStart ? '' : 'disabled'}>▶ Játék indítása</button>
             <button class="testbtn" id="mgtest">🧪 Minijátékok kipróbálása</button>
             <p class="muted">${l.canStart ? `Mindenki kész! (${l.count} játékos)` : 'Várj, amíg mindenki kész lesz…'}</p>
           </div>`
-          : `<p class="muted">${l.gameMode === 'mountain' ? '⛰️ Hegymászás' : `${l.rounds} kör`} · ${l.count} játékos · a ⭐ VIP indítja a játékot</p>`}`;
+          : `<p class="muted">${l.gameMode === 'mountain' ? '⛰️ Hegymászás' : (l.gameMode === 'highway' ? '🛣️ Óceánsztráda' : `${l.rounds} kör`)} · ${l.count} játékos · a ⭐ VIP indítja a játékot</p>`}`;
       screen.querySelectorAll('.animal').forEach((b) => b.addEventListener('click', () => send({ t: 'char', v: b.dataset.a })));
       document.getElementById('ready').addEventListener('click', () => { buzz(30); send({ t: 'ready', v: !l.ready }); });
       screen.querySelectorAll('.rounds button').forEach((b) => b.addEventListener('click', () => send({ t: 'rounds', v: Number(b.dataset.r) })));

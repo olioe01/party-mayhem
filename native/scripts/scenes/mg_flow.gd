@@ -76,8 +76,8 @@ static func split_teams() -> Dictionary:
 		if p.last_space == "R": c = 1
 		elif p.last_space in ["E", "V", "J", ""]: c = randi() % 2
 		colors[p.pid] = c
-	# hegymászásnál nincs csapat: a helyezés osztja a kockákat
-	if G.players.size() != 4 or G.is_mountain():
+	# hegymászásnál és az Óceánsztrádán nincs csapat: a helyezés osztja a kockákat
+	if G.players.size() != 4 or G.is_race():
 		return {"mode": "ffa", "colors": colors, "teams": []}
 	var blue: Array = G.players.filter(func(p): return colors[p.pid] == 0)
 	var red: Array = G.players.filter(func(p): return colors[p.pid] == 1)
@@ -112,6 +112,10 @@ class SelectScene:
 	var split: Dictionary
 	var stage := "teams"
 	var roll_t0 := 0.0
+	var duel := false            # Óceánsztráda: 1 a többiek ellen
+	var chooser = null           # Óceánsztráda: az utolsó helyezett választ három minijáték közül
+	var options: Array = []
+	var picked := -1
 
 	func _init(f := "") -> void:
 		force = f
@@ -121,6 +125,12 @@ class SelectScene:
 		Audio.music("mg_select")
 		split = MgFlow.split_teams()
 		G.team_split = split.teams
+		if G.is_highway() and force == "":
+			if G.hw_duel_now and _duel_setup():
+				return
+			if G.hw_choose and G.players.size() > 1 and not G.hw_duel_now:
+				_choose_setup()
+				return
 		var metas := MgFlow.all_metas()
 		var mode: String = split.mode
 		# a "max_players" kulcsú játékok (pl. Lépcsőverseny) csak legfeljebb ennyi játékossal kerülnek sorra
@@ -180,7 +190,7 @@ class SelectScene:
 		for p in G.players:
 			Net.set_ctrl(p.pid, {"mode": "wait", "icon": "🎰", "title": "Minijáték sorsolás…", "text": "Nézd a nagy képernyőt!"})
 		Main.I.world_env.environment = null
-		if G.players.size() == 4 and not G.is_mountain():
+		if G.players.size() == 4 and not G.is_race():
 			stage = "teams"
 			Audio.play("whoosh")
 			after(2.6, func():
@@ -190,6 +200,80 @@ class SelectScene:
 			stage = "roll"
 			roll_t0 = t
 		after((2.6 if stage == "teams" else 0.0) + dur + 1.6, func(): Main.I.set_scene(MgFlow.IntroScene.new(choice, G.team_split)))
+
+	## A minijátékok, amelyek ennyi játékossal, ebben a módban játszhatók.
+	func _pool(mode: String) -> Array:
+		var np := G.players.size()
+		var metas: Array = MgFlow.all_metas().filter(func(m): return np <= int(m.get("max_players", 99)) and m.modes.has(mode))
+		return metas
+
+	## Óceánsztráda párbaj: az egyedül játszó a többiek ellen, egy csapatos minijátékban (valódi játékosok, bot nélkül).
+	func _duel_setup() -> bool:
+		var solo = G.by_pid(G.hw_duel)
+		if solo == null or G.players.size() < 2:
+			G.hw_duel_now = false
+			return false
+		var rivals: Array = G.players.filter(func(p): return p != solo)
+		split = {"mode": "1v3", "colors": {}, "teams": [rivals, [solo]]}
+		for p in rivals:
+			split.colors[p.pid] = 0
+		split.colors[solo.pid] = 1
+		G.team_split = split.teams
+		duel = true
+		var pool: Array = _pool("1v3").filter(func(m): return m.id != "tug")
+		choice = pool[randi() % pool.size()]
+		print_verbose("[hw] párbaj: %s a többiek ellen – %s" % [solo.name, choice.id])
+		_make_strip()
+		for p in G.players:
+			Net.set_ctrl(p.pid, {"mode": "wait", "icon": "⚔️", "title": "Párbaj-minijáték…", "text": "%s a többiek ellen!" % solo.name})
+		Main.I.world_env.environment = null
+		stage = "roll"
+		roll_t0 = t
+		after(dur + 1.6, func(): Main.I.set_scene(MgFlow.IntroScene.new(choice, G.team_split)))
+		return true
+
+	## A 200-as kapu után: az utolsó helyezett (holtversenyben sorsolt) választ három minijáték közül.
+	func _choose_setup() -> void:
+		var low := 999999
+		for p in G.players:
+			low = mini(low, p.node)
+		var lasts: Array = G.players.filter(func(p): return p.node == low)
+		chooser = lasts[randi() % lasts.size()]
+		var pool: Array = _pool("ffa").filter(func(m): return not G.recent_mg.has(m.id))
+		if pool.size() < 3:
+			pool = _pool("ffa")
+		for k in 3:
+			if pool.is_empty():
+				break
+			var i := randi() % pool.size()
+			options.append(pool[i])
+			pool.remove_at(i)
+		stage = "pick"
+		Main.I.world_env.environment = null
+		for p in G.players:
+			if p != chooser:
+				Net.set_ctrl(p.pid, {"mode": "wait", "icon": "🎮", "title": "%s választ" % chooser.name, "text": "A sereghajtó dönti el, mi lesz a minijáték."})
+		Audio.play("bell")
+		_ask_pick()
+
+	func _ask_pick() -> void:
+		var opts: Array = []
+		for m in options:
+			opts.append({"label": "%s %s" % [m.icon, m.name], "sub": m.get("tagline", "")})
+		var msg: Dictionary = await Net.ask(chooser.pid, {"mode": "choice", "title": "Te választasz minijátékot!", "text": "Utolsóként te döntesz.", "options": opts}, ["choice"], 25)
+		picked = clampi(int(msg.get("v", 0)), 0, options.size() - 1)
+		choice = options[picked]
+		print_verbose("[hw] %s választott: %s" % [chooser.name, choice.id])
+		G.recent_mg.erase(choice.id)
+		G.recent_mg.append(choice.id)
+		Audio.play("fanfare")
+		Main.I.burst(640, 360, {"n": 60, "speed": 480})
+		after(2.0, func(): Main.I.set_scene(MgFlow.IntroScene.new(choice, [])))
+
+	func _make_strip() -> void:
+		var ffa_list: Array = MgFlow.all_metas()
+		for i in 30:
+			strip.append(choice if i == target else ffa_list[(i * 7 + 3) % ffa_list.size()])
 
 	func pos() -> float:
 		return D.ease_out_cubic(min(1.0, (t - roll_t0) / dur)) * target
@@ -206,12 +290,34 @@ class SelectScene:
 			Audio.play("fanfare")
 			Main.I.burst(640, 360, {"n": 70, "speed": 520})
 
+	func _draw_pick(c: CanvasItem) -> void:
+		D.text(c, "🎮 %s VÁLASZT!" % chooser.name.to_upper(), 640, 110, {"size": 46, "stroke": D.DARK, "sw": 10, "color": Color("#ffd43b"), "maxw": 1200})
+		D.text(c, "A sereghajtó dönti el, melyik minijáték jöjjön (a telefonján)", 640, 160, {"size": 22, "color": Color("#cfc6f5")})
+		D.avatar(c, chooser, 640, 225, 34)
+		for i in options.size():
+			var m: Dictionary = options[i]
+			var x := 640.0 + (i - (options.size() - 1) / 2.0) * 330.0
+			var sel := picked == i
+			var s := (1.12 + sin(Main.I.time * 8.0) * 0.03) if sel else (0.85 if picked >= 0 else 1.0)
+			c.draw_set_transform(Vector2(x, 450), 0, Vector2(s, s))
+			var col := Color(m.color)
+			D.panel(c, -140, -160, 280, 320, {"fill": D.shade(col, -0.45), "stroke": Color("#ffd43b") if sel else col, "lw": 7 if sel else 4, "r": 28})
+			D.emoji(c, m.icon, 0, -60, 100)
+			D.text(c, m.name, 0, 60, {"size": 28, "maxw": 250})
+			D.wrap(c, m.get("tagline", ""), 0, 100, 240, 24, {"size": 17, "color": Color("#e5dbff"), "align": "center", "bold": false})
+			c.draw_set_transform(Vector2.ZERO)
+
 	func draw(c: CanvasItem) -> void:
 		MgFlow.bg(c)
 		if stage == "teams":
 			_draw_teams(c)
 			return
+		if stage == "pick":
+			_draw_pick(c)
+			return
 		var mode_txt: String = {"ffa": "🎰 MINIJÁTÉK SORSOLÁS 🎰", "2v2": "🎰 2 A 2 ELLEN 🎰", "1v3": "🎰 1 A 3 ELLEN 🎰"}.get(split.mode, "🎰")
+		if duel:
+			mode_txt = "⚔️ 1 A TÖBBIEK ELLEN ⚔️"
 		D.text(c, mode_txt, 640, 110, {"size": 48, "stroke": D.DARK, "sw": 10, "color": Color("#ffd43b")})
 		var ps := pos()
 		var spacing := 300.0
@@ -628,7 +734,7 @@ class PlayScene:
 			c.draw_set_transform(Vector2(640, 360), 0, Vector2(1 + k, 1 + k))
 			D.text(c, "RAJT!", 0, 0, {"size": 150, "color": Color("#ffd43b"), "stroke": D.DARK, "sw": 14, "alpha": 1.0 - k})
 			c.draw_set_transform(Vector2.ZERO)
-		elif phase == "end":
+		elif phase == "end" and not mg.get("own_end", false):
 			c.draw_rect(Rect2(0, 0, 1280, 720), Color(0.04, 0.02, 0.12, 0.35))
 			var s := D.ease_out_back(min(1.0, (t - end_t) * 3.0))
 			c.draw_set_transform(Vector2(640, 360), 0, Vector2(s, s))
@@ -639,6 +745,8 @@ class PlayScene:
 # ------------------------------------------------------------------ eredmény
 class ResultScene:
 	extends GameScene
+	const K = preload("res://scripts/minigames/mg_kit.gd")
+	const STAGE := Rect2(690, 150, 560, 500)
 	var mg: Dictionary
 	var ranking: Array
 	var teams: Array
@@ -651,6 +759,10 @@ class ResultScene:
 	var tie_t0 := 0.0
 	var tie_closing := false
 	var res_t0 := 0.0
+	# 3D-s színpad a jobb oldalon: a figurák helyezés szerint reagálnak (csak látvány)
+	var stage_vp: SubViewport
+	var stage_cam: Camera3D
+	var stage_figs: Array = []
 
 	func _init(m := {}, r := [], tm := []) -> void:
 		mg = m
@@ -664,12 +776,17 @@ class ResultScene:
 			_celebrate()
 			return
 		_ffa_rows()
-		if not _tie_start():
+		if (mg.get("keep_ties", false) and not (G.is_highway() and not G.mg_test)) or not _tie_start():
 			_ffa_finish()
 			_celebrate()
 
+	func exit() -> void:
+		if stage_vp:
+			stage_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+
 	func _celebrate() -> void:
 		res_t0 = t
+		_build_stage()
 		after(0.3, func():
 			Audio.play("fanfare")
 			Audio.jingle("victory")
@@ -692,6 +809,9 @@ class ResultScene:
 			row.award = MgFlow.AWARDS[row.place] if row.place < MgFlow.AWARDS.size() else 0
 		if G.is_mountain() and not G.mg_test:
 			_mountain_dice()
+			return
+		if G.is_highway() and not G.mg_test:
+			_highway_dice()
 			return
 		for row in rows:
 			_give(row)
@@ -753,7 +873,126 @@ class ResultScene:
 			_ffa_finish()
 			_celebrate()
 
-	func update(_dt: float) -> void:
+	## A jobb oldali színpad: minden valódi résztvevő a helyezése szerinti magasságú talapzaton,
+	## helyezési sorrendben. Győztes: ugrál, karját a magasba emeli, nevet. Utolsó: lehajtott fej,
+	## lógó kar, szomorú arc. Középmezőny: semleges, kicsit integet. Holtversenyben azonos a reakció.
+	func _build_stage() -> void:
+		if stage_vp:
+			return
+		stage_vp = SubViewport.new()
+		stage_vp.size = Vector2i(int(STAGE.size.x * 1.5), int(STAGE.size.y * 1.5))
+		stage_vp.own_world_3d = true
+		stage_vp.transparent_bg = true
+		stage_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		add_child(stage_vp)
+		var root := Node3D.new()
+		stage_vp.add_child(root)
+		var env := Environment.new()
+		env.background_mode = Environment.BG_CLEAR_COLOR
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = Color("#cbbcff")
+		env.ambient_light_energy = 0.7
+		env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+		stage_cam = Camera3D.new()
+		stage_cam.fov = 38
+		stage_cam.environment = env
+		root.add_child(stage_cam)
+		stage_cam.position = Vector3(0, 2.7, 8.6)
+		stage_cam.look_at_from_position(stage_cam.position, Vector3(0, 1.0, 0))
+		stage_cam.current = true
+		var key := DirectionalLight3D.new()
+		key.rotation_degrees = Vector3(-50, -25, 0)
+		key.light_energy = 1.2
+		key.light_color = Color("#fff3dc")
+		key.shadow_enabled = true
+		root.add_child(key)
+		var fill := DirectionalLight3D.new()
+		fill.rotation_degrees = Vector3(-20, 140, 0)
+		fill.light_energy = 0.45
+		fill.light_color = Color("#b197fc")
+		root.add_child(fill)
+		var n := rows.size()
+		var maxp := 0
+		for r in rows:
+			maxp = maxi(maxp, int(r.place))
+		var gap: float = minf(1.5, 6.4 / maxf(1.0, n))
+		var sc: float = minf(1.0, gap / 1.25)
+		for i in n:
+			var r: Dictionary = rows[i]
+			var place: int = r.place
+			var x: float = (i - (n - 1) / 2.0) * gap
+			var h: float = 0.25 + (0.9 * float(maxp - place) / float(maxp) if maxp > 0 else 0.9)
+			var pc: String = K.PLACE_COLORS[mini(place, 3)]
+			Chars3D.box(root, gap * 0.92, h, 1.1, Chars3D.mat(pc, {"rough": 0.35, "metal": 0.2}), Vector3(x, h / 2.0 - 0.6, 0))
+			Chars3D.box(root, gap * 0.92 + 0.06, 0.06, 1.16, Chars3D.mat("#ffffff", {"rough": 0.4}), Vector3(x, h - 0.6, 0))
+			var p = r.p
+			var m := Chars3D.build(p.char_id)
+			m.scale = Vector3.ONE * sc
+			root.add_child(m)
+			var col: Color = p.color
+			var mood := "mid"
+			if place == 0:
+				mood = "win"
+			elif place == maxp:
+				mood = "lose"
+			stage_figs.append({"m": m, "i": i, "x": x, "y": h - 0.6, "sc": sc, "mood": mood,
+				"arms": K.build_arms(m, col.darkened(0.1).to_html(false), 0.5), "face": K.build_face(m), "next": 0.6 + i * 0.3})
+		_stage_tick(0.0)
+
+	func _stage_tick(dt: float) -> void:
+		if stage_figs.is_empty():
+			return
+		var tv := t - res_t0
+		for f in stage_figs:
+			var m: Chars3D.CharModel = f.m
+			var a := m.animate(dt)
+			var i: int = f.i
+			var appear: float = clamp((tv - 0.3 - i * 0.3) * 2.5, 0.0, 1.0)
+			m.visible = appear > 0.0
+			var y: float = f.y + (1.0 - D.ease_out_cubic(appear)) * 3.0
+			var lean := 0.0
+			var arm_t: Array = []
+			var mood: String = f.mood
+			var arms: Array = f.arms
+			for arm in arms:
+				var sd: float = arm.side
+				arm_t.append(Vector3(sd * 0.36, 0.12 + sin(tv * 2.0 + sd) * 0.02, 0.06))
+			if appear >= 1.0:
+				if tv >= float(f.next):
+					if mood == "win":
+						m.emote("cheer")
+						f.next = tv + 2.4
+					elif mood == "lose":
+						m.emote("sad")
+						f.next = tv + 3.2
+					else:
+						f.next = tv + 99.0
+				match mood:
+					"win":
+						y += absf(sin(tv * 5.0 + i)) * 0.25
+						for k in arm_t.size():
+							var sd: float = arms[k].side
+							arm_t[k] = Vector3(sd * (0.3 + sin(tv * 10.0 + sd) * 0.08), 1.05, 0.1)
+						K.set_face(m, f.face, 0.8, 1.1, 0.6)
+					"lose":
+						lean = 0.4
+						for k in arm_t.size():
+							var sd: float = arms[k].side
+							arm_t[k] = Vector3(sd * 0.22, 0.02, 0.22)
+						K.set_face(m, f.face, 0.12, 0.85, -0.85)
+					_:
+						for k in arm_t.size():
+							var sd: float = arms[k].side
+							if sd > 0:
+								arm_t[k] = Vector3(0.42, 0.85 + sin(tv * 6.0 + i) * 0.12, 0.15)
+						K.set_face(m, f.face, 0.2, 1.0, 0.1)
+			m.position = Vector3(f.x, y + a.y * float(f.sc), 0)
+			m.rotation = Vector3(lean + a.tilt, a.spin, 0)
+			for k in arm_t.size():
+				K.arm_to(arms[k], arm_t[k], Vector3(0.8, -0.4, -0.3))
+
+	func update(dt: float) -> void:
+		_stage_tick(dt)
 		if stage != "tie" or tie_closing:
 			return
 		var el := t - tie_t0
@@ -790,6 +1029,51 @@ class ResultScene:
 			Net.vibrate(p.pid, [100, 50, 100, 50, 300] if row.place == 0 else 80)
 		G.mtn_order = order
 
+	## Óceánsztráda: a helyezés szerinti kockaszám (a résztvevők számához igazított táblából) és a sorrend.
+	func _highway_dice() -> void:
+		var n := rows.size()
+		var order: Array = []
+		for row in rows:
+			var p = row.p
+			p.hw_dice = HighwayLayout.dice_for(row.place, n)
+			p.mg_place = row.place
+			row["hw"] = p.hw_dice
+			order.append(p)
+			if row.place == 0:
+				p.stats.mg_wins += 1
+			Net.set_ctrl(p.pid, {"mode": "result", "icon": MgFlow.MEDALS[row.place] if row.place < 3 else "🎮",
+				"title": "%d. hely" % (row.place + 1), "text": "%d kockával dobsz! 🎲" % p.hw_dice})
+			Net.vibrate(p.pid, [100, 50, 100, 50, 300] if row.place == 0 else 80)
+			Net.push_status(p.pid)
+		G.mtn_order = order
+
+	## Óceánsztráda párbaj: ha az egyedül játszó nyer, 5 kocka; ha a többiek, fejenként 2; döntetlennél semmi.
+	func _highway_duel() -> void:
+		var solo = G.by_pid(G.hw_duel)
+		var solo_team := -1
+		for ti in teams.size():
+			if solo != null and teams[ti].has(solo):
+				solo_team = ti
+		G.hw_bonus = []
+		for row in rows:
+			row.award = 0
+		if team_win >= 0 and solo_team >= 0:
+			if team_win == solo_team:
+				G.hw_bonus.append({"pid": solo.pid, "n": HighwayLayout.DUEL_SOLO_DICE})
+			else:
+				for p in teams[team_win]:
+					G.hw_bonus.append({"pid": p.pid, "n": HighwayLayout.DUEL_TEAM_DICE})
+		var got := {}
+		for e in G.hw_bonus:
+			got[e.pid] = int(e.n)
+		for row in rows:
+			var n: int = got.get(row.p.pid, 0)
+			row["hw"] = n
+			row["hw_bonus"] = true
+			Net.set_ctrl(row.p.pid, {"mode": "result", "icon": "⚔️", "title": "GYŐZELEM!" if n > 0 else ("Döntetlen" if team_win == -1 else "Vesztettetek"),
+				"text": "+%d bónuszkocka 🎲" % n if n > 0 else "Most nincs bónuszkocka."})
+		print_verbose("[hw] párbaj vége: %s" % str(G.hw_bonus))
+
 	func _team_result() -> void:
 		var score := [0.0, 0.0]
 		var byp := {}
@@ -818,6 +1102,9 @@ class ResultScene:
 				var place := 0 if (team_win == ti or team_win == -1) else 1
 				rows.append({"p": p, "place": place, "award": award, "label": byp.get(p.pid, {"label": ""}).label, "team": ti})
 		rows.sort_custom(func(a, b): return a.place < b.place)
+		if G.is_highway() and G.hw_duel_now and not G.mg_test:
+			_highway_duel()
+			return
 		for row in rows:
 			_give(row)
 
@@ -882,34 +1169,43 @@ class ResultScene:
 			D.text(c, "%s CSAPAT NYERT!" % MgFlow.TEAM_NAMES[team_win], 640, 122, {"size": 32, "color": MgFlow.TEAM_COLORS[team_win].lightened(0.35), "stroke": D.DARK, "sw": 6})
 		elif team_win == -1:
 			D.text(c, "DÖNTETLEN!", 640, 122, {"size": 32, "color": Color("#ffd43b")})
+		elif G.is_highway() and not G.mg_test:
+			D.text(c, "A helyezés dönti el, hány kockával dobsz", 640, 118, {"size": 24, "color": Color("#cfc6f5")})
 		elif G.is_mountain():
 			D.text(c, "A helyezés osztja a következő dobás kockáit", 640, 118, {"size": 24, "color": Color("#cfc6f5")})
 		else:
 			D.text(c, "Eredmények", 640, 118, {"size": 26, "color": Color("#cfc6f5")})
+		if stage_vp:
+			D.panel(c, STAGE.position.x, STAGE.position.y, STAGE.size.x, STAGE.size.y, {"r": 26, "fill": Color(1, 1, 1, 0.06), "stroke": Color(1, 1, 1, 0.16), "shadow": false})
+			c.draw_texture_rect(stage_vp.get_texture(), STAGE, false)
 		var n := rows.size()
 		var row_h: float = min(70.0, 520.0 / max(1, n))
+		var x0 := 30.0
 		for i in n:
 			var r: Dictionary = rows[i]
 			var appear: float = clamp((t - res_t0 - 0.3 - i * 0.3) * 3.0, 0.0, 1.0)
 			if appear <= 0:
 				continue
 			var y := 160.0 + i * (row_h + 6)
-			var x := lerpf(-700.0, 0.0, D.ease_out_back(appear))
+			var x := lerpf(-700.0, 0.0, D.ease_out_back(appear)) + x0
 			var first: bool = r.place == 0
 			var stroke: Color = r.p.color
 			if r.has("team"):
 				stroke = MgFlow.TEAM_COLORS[r.team]
-			D.panel(c, 250 + x, y, 780, row_h, {"fill": Color(1, 0.83, 0.23, 0.22) if first else Color(1, 1, 1, 0.08), "stroke": Color("#ffd43b") if first else stroke, "r": 18})
+			D.panel(c, x, y, 640, row_h, {"fill": Color(1, 0.83, 0.23, 0.22) if first else Color(1, 1, 1, 0.08), "stroke": Color("#ffd43b") if first else stroke, "r": 18})
 			var cy := y + row_h / 2
 			if r.place < 3:
-				D.emoji(c, MgFlow.MEDALS[r.place], 295 + x, cy, row_h * 0.6)
+				D.emoji(c, MgFlow.MEDALS[r.place], 42 + x, cy, row_h * 0.6)
 			else:
-				D.text(c, "%d." % (r.place + 1), 295 + x, cy, {"size": 28})
-			D.avatar(c, r.p, 355 + x, cy, row_h * 0.36, {"shadow": false})
-			D.text(c, r.p.name, 395 + x, cy, {"size": 28, "align": "left", "maxw": 260})
-			D.text(c, str(r.label), (720 if r.has("dice") else 760) + x, cy, {"size": 24, "color": Color("#d0c8f0"), "maxw": 170 if r.has("dice") else 200})
-			if r.has("dice"):
-				D.text(c, G.dice_text(r.dice), 1010 + x, cy, {"size": 26, "color": Color("#ffd43b"), "align": "right", "maxw": 190})
+				D.text(c, "%d." % (r.place + 1), 42 + x, cy, {"size": 28})
+			D.avatar(c, r.p, 100 + x, cy, row_h * 0.36, {"shadow": false})
+			D.text(c, r.p.name, 136 + x, cy, {"size": 26, "align": "left", "maxw": 190})
+			D.text(c, str(r.label), (400 if r.has("dice") else 430) + x, cy, {"size": 22, "color": Color("#d0c8f0"), "maxw": 130 if r.has("dice") else 170})
+			if r.has("hw"):
+				var hw_txt := ("+%d 🎲" % r.hw if r.hw > 0 else "–") if r.has("hw_bonus") else "🎲 × %d" % r.hw
+				D.text(c, hw_txt, 626 + x, cy, {"size": 28, "color": Color("#ffd43b"), "align": "right"})
+			elif r.has("dice"):
+				D.text(c, G.dice_text(r.dice), 626 + x, cy, {"size": 24, "color": Color("#ffd43b"), "align": "right", "maxw": 150})
 			else:
-				D.text(c, "+%d 🪙" % r.award if r.award > 0 else "–", 990 + x, cy, {"size": 30, "color": Color("#ffd43b"), "align": "right"})
+				D.text(c, "+%d 🪙" % r.award if r.award > 0 else "–", 626 + x, cy, {"size": 28, "color": Color("#ffd43b"), "align": "right"})
 		D.text(c, "ENTER = tovább", 1250, 700, {"size": 15, "color": Color("#8f84c4"), "align": "right", "bold": false})

@@ -77,7 +77,7 @@ input#name:focus { border-color: #ffd43b; }
 .rounds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .rounds button { padding: 10px 0; border-radius: 14px; background: #ffffff18; font-size: 17px; font-weight: 600; }
 .rounds button.sel { background: #ffd43b; color: var(--ink); }
-.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
 .modes button { padding: 12px 4px; border-radius: 14px; background: #ffffff18; font-size: 16px; font-weight: 700; }
 .modes button.sel { background: #ffd43b; color: var(--ink); }
 .start { padding: 16px; font-size: 24px; font-weight: 700; border-radius: 18px; background: #51cf66; color: #083b1a; box-shadow: 0 5px 0 #2b8a3e; }

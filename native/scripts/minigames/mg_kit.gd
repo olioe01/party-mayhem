@@ -1,8 +1,7 @@
 extends RefCounted
 ## Közös segédek a Kártyafogó, a Tűzijáték-pumpa és a Sínharc minijátékhoz:
-## gépi kitöltő játékosok, helyszínek színei, fényes óra, helyezéscímkék, karok és arckifejezés.
+## helyszínek színei, fényes óra, helyezéscímkék, karok és arckifejezés.
 
-const State = preload("res://scripts/core/state.gd")
 const W = preload("res://scripts/minigames/presents_world.gd")
 const Presents = preload("res://scripts/minigames/mg_presents.gd")
 
@@ -14,36 +13,9 @@ const PLACE_TEXT := ["1.", "2.", "3.", "4."]
 const ARM_L := 0.6
 
 
-## Ha négynél kevesebben játszanak, gépi ellenfelek töltik fel a helyeket.
-## Ezek nem kerülnek a ranglistába (az eredményképernyő csak a valódi játékosokat ismeri).
-static func fill_cpu(players: Array, n := 4) -> Array:
-	var out: Array = []
-	var used := {}
-	var used_col := {}
-	for p in players:
-		used[p.char_id] = true
-		used_col[p.color_hex] = true
-	var k := 0
-	for c in State.CHARS:
-		if players.size() + out.size() >= n:
-			break
-		if used.has(c.id):
-			continue
-		var cpu = State.PlayerData.new()
-		cpu.pid = "cpu%d" % k
-		cpu.name = "Gép %d" % (k + 1)
-		cpu.is_bot = true
-		cpu.char_id = c.id
-		for hx in State.COLORS:
-			if not used_col.has(hx):
-				cpu.color_hex = hx
-				used_col[hx] = true
-				break
-		cpu.color = Color(cpu.color_hex)
-		out.append(cpu)
-		k += 1
-	return out
-
+## Gépi kitöltő ellenfél nincs: minden minijátékban pontosan annyi résztvevő van, ahány valódi
+## játékos a szobában (globális szabály). A gépi szintek csak a fejlesztői tesztbotokra (--bots)
+## és a lecsatlakozott játékosok helyett játszó automatikára vonatkoznak.
 
 ## gépi nehézség: 0 = könnyű, 1 = közepes, 2 = nehéz; a gépek sorban más-más szintet kapnak
 static func ai_level(k: int) -> int:

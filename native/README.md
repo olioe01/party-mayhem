@@ -12,7 +12,6 @@ Ez a Party Mayhem önálló, telepítés nélkül futtatható változata, Godot 
 |---|---|
 | `F` / `F11` | teljes képernyő |
 | `M` | hang ki/be |
-| `B` | bot hozzáadása (lobby) |
 | `J` | játékmód váltása (lobby) |
 | `T` | minijáték teszt: a minijátékok tét nélkül kipróbálhatók (lobby) |
 | `←` `→` | körök száma (lobby) |
@@ -41,7 +40,7 @@ Tudnivalók:
 - **Egy hálózaton belül vagy VPN-nel** (Radmin VPN, Tailscale, Hamachi) szerver nélkül is megy: a kód helyett a gazda gépének IP-címét kell beírni. Ilyenkor a Windows tűzfal kérdésénél a gazdának engedélyeznie kell a játékot.
 - Parancssorból: `PartyMayhem.exe -- --join=KX7PM` (vagy `--join=192.168.1.23`) azonnal csatlakozik, a `-- --room` indításkor megnyitja a szobát. Teszthez `--relay=ws://127.0.0.1:8787` (a `--room` / `--join` elé írva) másik közvetítő szervert ad meg.
 
-## Két nagy játékmód
+## Három nagy játékmód
 
 A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a ⭐ VIP telefonján lehet választani.
 
@@ -56,6 +55,14 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 - 🚧 **3 akadály**: téglafal (be kell ütni), bástya (az ágyúval kell szétlőni) és egy alvó jeti (hógolyóval kell felébreszteni). Mindegyiknél külön akadály-kockával dobsz, és 4, 5 vagy 6 kell. Aki lépés közben ér oda, azonnal dobhat, és ha sikerül, a maradék lépéseivel megy is tovább; aki nem dobja meg, a következő körében újra próbálkozhat. A legyőzött akadály mindenkinek szabad utat ad.
 - A piros mezőkön tényleg megkerget a medve (feljebb kőomlás, majd lavina sodor vissza), a zöldeken a hátszél tol előre.
 - A különleges mezők és az akadályok pontos helye játékonként kicsit más.
+
+**🛣️ Óceánsztráda** – egy hosszú, egyenes sztráda az óceán fölött, 351 mező a célkapuig, 1–8 játékos. Nincs körszám: aki elsőként átjut a célkapun, az nyer.
+- Minden kör minijátékkal kezdődik; a helyezés adja a sorrendet és azt, hány hatoldalú kockával dobsz (holtversenyt kockadobás dönt el). 4 főnél 10 / 7 / 4 / 2 kocka, 8 főnél 10 / 9 / 8 / 7 / 6 / 5 / 4 / 2; a többi létszám táblája a `world/highway_layout.gd`-ben állítható.
+- A dobott összeggel a figura végigfut a sztrádán. Ha minden kocka ugyanazt mutatja: +5 bónuszkocka (aranyszínű összeg). A dobást a játék értékeli is (jó: arany szám, ökölrázás, ujjongó nézők; gyenge: billegő szám, csípőre tett kéz).
+- Különleges mezők: ⏩ hátszél (+10/+20), ⏪ szembeszél (−10/−20), kék kockamező (5 vagy 10 kocka előre, itt is jár az egyforma-bónusz), piros kockamező (5 vagy 10 kocka vissza), 🆙 felzárkózó (csak a sereghajtónak: +10/+20/+30 vagy UFO a vezetőhöz), 🛸 UFO (elvisz egy véletlen másik játékos mellé), 🚀 rakéta (a 190. mezőig), ⚔️ 1 a többiek ellen (a kör végén csapatos párbaj-minijáték: ha az egyedül játszó nyer, 5 bónuszkocka, ha a többiek, fejenként 2; egy játékosnál helyette egyszemélyes kihívás).
+- 🌉 **100: felvonóhíd** – egy kockával páratlan kell. 🚦 **200: jelzőlámpás kapu** – 5 lámpakockából legalább egy zöld kell; ezután minden kör előtt az utolsó helyezett választ minijátékot három közül. Ha nem sikerül: egy mezőt vissza, és a következő körben újra.
+- 🏁 **351: célkapu** – 10 kockával legalább 40 kell (bukás után már 35 is elég); ha nem sikerül, 15 mezőt vissza.
+- Nézőcsoportok szurkolnak vagy csóválják a fejüket, delfinek ugrálnak, az UFO és a rakéta saját animációval visz.
 
 ## Mi van benne (Koronavadászat)
 
@@ -76,6 +83,8 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 
 **31 minijáték** (válogatás):
 
+Minden minijátékban pontosan annyian vesznek részt, ahány valódi játékos a szobában van (1 fő is játszhat); gépi kitöltő ellenfél nincs. A közös eredményképernyőn bal oldalt a lista, jobb oldalt 3D-s talapzatokon a figurák: a győztes ugrál és a magasba emeli a karját, az utolsó lehajtott fejjel szomorkodik.
+
 | | Név | Irányítás | Megjelenés |
 |---|---|---|---|
 | 🚀 | Rakétaverseny | gyors koppintás | 3D |
@@ -91,10 +100,11 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 | 💣 | Forró bomba *(új)* | joystick – célzás, gomb – dobás; akinél felrobban, kiesik | 3D |
 | 🎨 | Festékcsata *(új)* | joystick – amerre jársz, a te színedre vált a padló; vödör = nagy folt | 3D |
 | 🧊 | Olvadó jégtábla *(új)* | joystick – a csempe leszakad alattad, eleinte visszafagy | 3D |
-| 🎁 | Ajándéktorony *(új)* | ◀ ▶ – billegő ajándéktornyot egyensúlyozol: szél, remegés, félidőben plusz doboz, teherautó takarja a képet; a gépen A/D vagy ←/→ az első botot irányítja | 3D |
+| 🎁 | Ajándéktorony *(új)* | ◀ ▶ – billegő ajándéktornyot egyensúlyozol: szél, remegés, félidőben plusz doboz, teherautó takarja a képet; a gépen A/D vagy ←/→ az első játékost irányítja | 3D |
 | 🃏 | Kártyafogó *(új, max. 4 fő)* | 1–4 gomb – minden sorban mindenkinek egy lapja van; a menetedben előbb az 1. sorban keresed a sajátodat, ha megvan, jöhet a 2., aztán a 3.; ha mellényúlsz, minden lapod visszafordul és legközelebb elölről kezded; aki elsőként megtalálja mind a hármat, nyer (figyeld, mit fordítanak a többiek!) | 3D |
 | 🎆 | Tűzijáték-pumpa *(új, max. 4 fő)* | gyors koppintás 10 mp-ig – a töltés dönti el, milyen magasra száll a rakéta (±2,5% szerencse); a kamera követi az égbe | 3D, éjszakai tér |
 | 🚃 | Sínharc *(új, max. 4 fő)* | joystick – irány a kereszteződésben, hátrahúzva fordulás; TŰZ – lövés; csak a hátsó céltábla sebez, 3 életerő, 60 mp | 3D, várudvar |
+| 🌩️ | Viharpadló *(megújult)* | joystick (gépen WASD/nyilak) – a magasban lebegő platform bal fele PIROS, jobb fele KÉK; 5 mp alatt állj arra, amelyik szerinted megmarad; az egyik fele (fele-fele eséllyel) csapóajtóként lenyílik, aki rajta áll, lezuhan és ⚡ villámot kap; 3 kör, a legkevesebb villám nyer, holtversenyben azonos helyezés | 3D, óceán fölött, erősödő vihar |
 | 🔨 | Vakondvadász *(megújult, max. 8 fő)* | joystick + ÜTÉS (gépen WASD/nyilak + szóköz) – fuss a 3×3 lyukból kibújó vakondhoz és csapj le az óriási játékkalapáccsal: barna +1, arany +3; a kalapács a többieket is elkábítja; 30 mp, a végére egyre több vakond | 3D |
 | 🏗️ | Toronyépítő *(új)* | koppintás – ejtsd a lengő blokkot pontosan a toronyra | 3D |
 | 🎣 | Horgászverseny *(új)* | koppintás, amikor lemerül az úszó; kis hal 1, nagy hal 3, bakancs −1 | 3D |
@@ -131,7 +141,7 @@ Az exe-exporthoz kell a Windows export sablon (`~/.local/share/godot/export_temp
 
 Ellenőrzés két példánnyal egy gépen: az egyik `-- --bots=4 --autostart --speed=10 --sync-log`, a másik `-- --join=127.0.0.1:3001 --sync-log`; a vendég minden jelenetváltásnál kiírja, hogy a saját állapota bájtra egyezik-e a hosztéval (`EGYEZIK` / `ELTÉR`).
 
-Tesztelési kapcsolók (a `--` után): `--bots=4`, `--autostart`, `--rounds=2`, `--mode=mountain` (hegymászás), `--mg=beam` (adott minijáték), `--speed=2`, `--small` (kis ablak), `--shots=mappa` (automatikus képernyőképek), `--quit-at=60`.
+Tesztelési kapcsolók (a `--` után): `--bots=4`, `--autostart`, `--rounds=2`, `--mode=mountain` (hegymászás), `--mode=highway` (Óceánsztráda; `--start-node=N` innen indul mindenki), `--mg=beam` (adott minijáték), `--speed=2`, `--small` (kis ablak), `--shots=mappa` (automatikus képernyőképek), `--quit-at=60`.
 
 ```
 native/
@@ -141,9 +151,10 @@ native/
                                  snapshot (állapotmentés jelenetváltáskor), online_ui (a lobby online panelje)
   scripts/world/                 board_layout (pálya), board3d (3D tábla, kamera), chars3d (18 figura),
                                  mountain_layout + mountain3d (a hegymászás pályája és 3D hegye)
-  scripts/scenes/                lobby, board (táblamenet), mountain (hegymászás), mg_flow (minijáték-keret), final
+                                 highway_layout + highway3d (az Óceánsztráda számai és 3D világa)
+  scripts/scenes/                lobby, board (táblamenet), mountain (hegymászás), highway (Óceánsztráda), mg_flow (minijáték-keret), final
   scripts/minigames/             a minijátékok (a díszletet külön fájl is adhatja, pl. presents_world.gd;
-                                 mg_kit.gd: gépi kitöltők, ezüst óra, helyezéscímkék, kar és arc)
+                                 mg_kit.gd: ezüst óra, helyezéscímkék, kar és arc)
   web/                           telefonos kontroller (HTML/JS/CSS + portrék), becsomagolva: web.zip
   music/, tools/                 zenék és a generátoruk
 ```

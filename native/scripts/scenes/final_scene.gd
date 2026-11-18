@@ -119,7 +119,7 @@ func _run() -> void:
 			break
 		if b != BONUSES[0]:
 			chosen.append(b)
-	if G.is_mountain():
+	if G.is_race():
 		chosen = []   # hegymászásnál nincs bónusz korona: aki felért, az nyert
 	for b in chosen:
 		var best := 0
@@ -156,6 +156,8 @@ func _run() -> void:
 
 
 func _score_text(p) -> String:
+	if G.is_highway():
+		return "🏁 Átjutott a célkapun!" if p == G.mtn_winner else "🛣️ %d / %d mező" % [p.node, G.race_goal()]
 	if G.is_mountain():
 		return "🏔️ Felért a csúcsra!" if p == G.mtn_winner else "⛰️ %d / %d mező" % [p.node, G.mountain.goal]
 	return "%d 👑 · %d 🪙" % [p.crowns, p.coins]
@@ -226,7 +228,7 @@ func draw(c: CanvasItem) -> void:
 		var s := D.ease_out_back(min(1.0, t * 2.0))
 		c.draw_set_transform(Vector2(640, 330), 0, Vector2(s, s))
 		D.text(c, "🏁 VÉGE A JÁTÉKNAK! 🏁", 0, 0, {"size": 72, "color": Color("#ffd43b"), "stroke": D.DARK, "sw": 12})
-		D.text(c, "Lássuk, ki meddig jutott a hegyen…" if G.is_mountain() else "De még jönnek a bónusz koronák…", 0, 80, {"size": 30, "color": Color("#e5dbff")})
+		D.text(c, ("Lássuk, ki meddig jutott a sztrádán…" if G.is_highway() else "Lássuk, ki meddig jutott a hegyen…") if G.is_race() else "De még jönnek a bónusz koronák…", 0, 80, {"size": 30, "color": Color("#e5dbff")})
 		c.draw_set_transform(Vector2.ZERO)
 	elif stage == "bonus":
 		D.vgrad(c, Color("#3b0764"), Color("#0c0420"))
@@ -264,7 +266,7 @@ func _draw_podium(c: CanvasItem) -> void:
 		if age > (2 - i) * 0.5 + 0.4:
 			D.panel(c, q.x - 100, q.y + 4, 200, 62, {"r": 16, "fill": Color(0.08, 0.05, 0.19, 0.8), "stroke": p.color, "shadow": false})
 			D.text(c, p.name, q.x, q.y + 22, {"size": 24, "maxw": 190})
-			D.text(c, _score_text(p) if G.is_mountain() else "%d 👑  %d 🪙" % [p.crowns, p.coins], q.x, q.y + 50, {"size": 20, "color": Color("#ffe066"), "maxw": 190})
+			D.text(c, _score_text(p) if G.is_race() else "%d 👑  %d 🪙" % [p.crowns, p.coins], q.x, q.y + 50, {"size": 20, "color": Color("#ffe066"), "maxw": 190})
 			if i == 0:
 				var hq := cam.unproject_position(m.global_position + Vector3(0, 1.55 + abs(sin(Main.I.time * 4.0)) * 0.12, 0))
 				D.emoji(c, "👑", hq.x, hq.y, 56)
@@ -276,7 +278,7 @@ func _draw_podium(c: CanvasItem) -> void:
 		D.text(c, "%d." % G.place_of(p), x + 22, y + 26, {"size": 22})
 		D.avatar(c, p, x + 62, y + 26, 18, {"shadow": false})
 		D.text(c, p.name, x + 88, y + 18, {"size": 17, "align": "left", "maxw": 115})
-		D.text(c, ("⛰️ %d/%d" % [p.node, G.mountain.goal]) if G.is_mountain() else "%d👑 %d🪙" % [p.crowns, p.coins], x + 88, y + 38, {"size": 15, "align": "left", "color": Color("#ffe066")})
+		D.text(c, ("%s %d/%d" % ["🛣️" if G.is_highway() else "⛰️", p.node, G.race_goal()]) if G.is_race() else "%d👑 %d🪙" % [p.crowns, p.coins], x + 88, y + 38, {"size": 15, "align": "left", "color": Color("#ffe066")})
 	if age > 2.5:
 		button(c, 520, 640, 240, 56, "ÚJ JÁTÉK", Game.go_lobby, {"color": Color("#51cf66"), "size": 26})
 		D.text(c, "vagy a ⭐ VIP a telefonjáról · ENTER", 640, 710, {"size": 15, "color": Color("#a99fd6"), "bold": false})

@@ -117,7 +117,6 @@ func _ready() -> void:
 	for h in 9:
 		holes.append(MW.build_hole(self, _hole_pos(h)))
 	var all := players.duplicate()
-	all.append_array(K.fill_cpu(players))
 	var n := all.size()
 	var ai_k := 0
 	for i in n:

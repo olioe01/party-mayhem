@@ -17,6 +17,7 @@ const CLASS_FILES := [
 	"res://scripts/scenes/lobby_scene.gd",
 	"res://scripts/scenes/board_scene.gd",
 	"res://scripts/scenes/mountain_scene.gd",
+	"res://scripts/scenes/highway_scene.gd",
 	"res://scripts/scenes/final_scene.gd",
 	"res://scripts/scenes/mg_flow.gd",
 ]

@@ -155,34 +155,17 @@ func key(e: InputEventKey) -> void:
 		go()
 	elif e.keycode == KEY_T:
 		open_test()
-	elif e.keycode == KEY_B:
-		add_bot()
 	elif e.keycode == KEY_J:
-		set_mode("mountain" if G.mode == "crown" else "crown")
+		var mi := 0
+		for i in G.MODES.size():
+			if G.MODES[i].id == G.mode:
+				mi = i
+		set_mode(G.MODES[(mi + 1) % G.MODES.size()].id)
 	elif e.keycode == KEY_RIGHT or e.keycode == KEY_LEFT:
 		var i := ROUND_OPTIONS.find(G.max_rounds)
 		var j := clampi((1 if i < 0 else i) + (1 if e.keycode == KEY_RIGHT else -1), 0, ROUND_OPTIONS.size() - 1)
 		G.max_rounds = ROUND_OPTIONS[j]
 		refresh()
-
-
-func add_bot() -> void:
-	if G.players.size() >= G.MAX_PLAYERS:
-		return
-	var n := G.players.filter(func(p): return p.is_bot).size() + 1
-	Net.add_bot("Bot %d" % n)
-	Audio.play("pop")
-
-
-func remove_bot() -> void:
-	for i in range(G.players.size() - 1, -1, -1):
-		var b = G.players[i]
-		if b.is_bot:
-			Net.remove_bot(b.pid)
-			G.players.remove_at(i)
-			Game.update_vip()
-			refresh()
-			return
 
 
 func slot_pos(i: int) -> Vector2:
@@ -242,8 +225,9 @@ func draw(c: CanvasItem) -> void:
 		var gm: Dictionary = G.MODES[i]
 		var sel: bool = gm.id == G.mode
 		var mid: String = gm.id
-		button(c, 700 + i * 275, 54, 262, 50, "%s %s" % [gm.icon, gm.name], func(): set_mode(mid),
-			{"color": Color("#ffd43b") if sel else Color("#4b3a8a"), "text_color": Color("#2b1055") if sel else Color.WHITE, "size": 23})
+		var bw := 540.0 / G.MODES.size()
+		button(c, 700 + i * bw, 54, bw - 10, 50, "%s %s" % [gm.icon, gm.name], func(): set_mode(mid),
+			{"color": Color("#ffd43b") if sel else Color("#4b3a8a"), "text_color": Color("#2b1055") if sel else Color.WHITE, "size": 19 if G.MODES.size() > 2 else 23})
 	D.text(c, G.mode_info().desc, 700, 124, {"size": 17, "align": "left", "color": Color("#ffe8a3"), "maxw": 540, "bold": false})
 	for i in G.MAX_PLAYERS:
 		var s := slot_pos(i)
@@ -265,12 +249,14 @@ func draw(c: CanvasItem) -> void:
 		if p.is_bot:
 			D.text(c, "🤖", s.x - 58, s.y - 56, {"size": 20})
 
-	if G.is_mountain():
+	if G.is_highway():
+		D.text(c, "🛣️ %d mező · a célkapun átjutó első nyer" % HighwayLayout.GOAL, 470, 668, {"size": 21, "align": "left", "color": Color("#ffe8a3"), "maxw": 370})
+	elif G.is_mountain():
 		D.text(c, "⛰️ %d mező a csúcsig · az első nyer" % MountainLayout.GOAL, 470, 668, {"size": 21, "align": "left", "color": Color("#ffe8a3"), "maxw": 370})
 	else:
 		D.text(c, "Körök:", 470, 668, {"size": 24, "align": "left"})
 	for i in ROUND_OPTIONS.size():
-		if G.is_mountain():
+		if G.is_race():
 			break
 		var r: int = ROUND_OPTIONS[i]
 		var on: bool = r == G.max_rounds
@@ -278,9 +264,7 @@ func draw(c: CanvasItem) -> void:
 			G.max_rounds = r
 			Audio.play("select")
 			refresh(), {"color": Color("#ffd43b") if on else Color("#4b3a8a"), "text_color": Color("#2b1055") if on else Color.WHITE, "size": 22})
-	button(c, 855, 645, 110, 46, "+ Bot", add_bot, {"color": Color("#4dabf7"), "size": 20})
-	button(c, 975, 645, 90, 46, "− Bot", remove_bot, {"color": Color("#868e96"), "size": 20})
 	var can := not G.players.is_empty()
 	button(c, 1080, 640, 160, 56, "INDÍTÁS", go, {"color": Color("#51cf66") if can else Color("#555555"), "size": 26})
 	D.text(c, "A ⭐ VIP a telefonjáról is indíthat, ha mindenki kész. Itt: ENTER = indítás", 50, 680, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false, "maxw": 400})
-	D.text(c, "B = bot · J = játékmód · T = minijáték teszt · F = teljes képernyő · M = hang · P = FPS · O = online", 50, 700, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false})
+	D.text(c, "J = játékmód · T = minijáték teszt · F = teljes képernyő · M = hang · P = FPS · O = online", 50, 700, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false})

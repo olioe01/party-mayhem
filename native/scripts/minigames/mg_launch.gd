@@ -73,7 +73,6 @@ func _ready() -> void:
 	moon.shadow_enabled = true
 	_build_city()
 	var all := players.duplicate()
-	all.append_array(K.fill_cpu(players))
 	var n := all.size()
 	var ai_k := 0
 	for i in n:
