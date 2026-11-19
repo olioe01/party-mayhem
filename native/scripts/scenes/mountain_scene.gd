@@ -174,6 +174,14 @@ func turn(p) -> void:
 		await sleep(0.4)
 		return
 	var vals: Array = await roll(p, "Koppints a dobáshoz!")
+	# egyforma kockák (legalább kettő): még egy szabályos kockával dobhat
+	if vals.size() >= 2 and vals.all(func(v): return v == vals[0]):
+		Audio.play("fanfare")
+		Audio.play("sparkle")
+		Main.I.confetti(40)
+		m3.emote(p.pid, "happy")
+		await toast("✨ EGYFORMA KOCKÁK!", "%s még egy kockával dobhat!" % p.name, 1.6, p)
+		vals.append((await roll(p, "Bónuszkocka!", [6]))[0])
 	var total := 0
 	for v in vals:
 		total += v

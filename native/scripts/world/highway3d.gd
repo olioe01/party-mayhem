@@ -42,9 +42,12 @@ var final_open := 0.0
 var final_target := 0.0
 var marker: Node3D
 var cam_look := Vector3.ZERO
-var cam_off := Vector3(4.5, 5.5, 10.0)
+var cam_off := Vector3(4.5, 5.5, 10.0)     # az út keretében (x jobbra, z hátra); cam_yaw forgatja
 var cam_look_t := Vector3.ZERO
 var cam_off_t := Vector3(4.5, 5.5, 10.0)
+var cam_yaw := 0.0                          # a kamera iránya (az út iránya, lassan követi)
+var cam_yaw_t := 0.0
+var cam_s := 0.0                            # merre néz a kamera az út mentén (delfinekhez)
 var cam_speed := 2.5
 var shake := 0.0
 var puffs: Array = []        # füstpamacsok: [{node, t0, dur, v}]
@@ -174,18 +177,36 @@ void fragment() {
 	add_child(sea)
 
 
+## Szigetek az út két oldalán: [mező, oldaltávolság (+ = jobbra), sugár]. Amelyik túl közel esne
+## bármelyik útághoz (a kanyarok miatt), az kimarad.
+const ISLES := [[-6, -48, 16], [20, 46, 14], [40, -72, 22], [70, 64, 24], [104, -60, 30], [128, 70, 18],
+	[166, -64, 22], [196, 62, 26], [232, -66, 30], [262, 58, 20], [290, -70, 34], [316, 66, 24],
+	[350, -60, 40], [372, 40, 30], [420, -10, 60], [-30, 70, 18], [180, 150, 44], [300, -160, 44]]
+## Felhők: [mező, oldaltávolság, magasság, méret]
+const CLOUDS := [[-4, 36, 18, 6.0], [30, -40, 24, 8.0], [70, 50, 30, 9.0], [110, -46, 20, 7.0], [150, 44, 26, 8.0],
+	[200, -56, 34, 10.0], [250, 52, 40, 12.0], [300, -44, 50, 16.0], [180, 26, 9, 4.0], [330, -30, 8, 4.0], [20, 70, 14, 6.0],
+	[380, 0, 46, 14.0]]
+
+
+## Világpont az út keretében: s. mező, x oldalra (+ = jobbra), y fel, z hátra (helyi).
+static func at(s: float, x := 0.0, y := 0.0, z := 0.0) -> Vector3:
+	return HL.xf(s) * Vector3(x, y, z)
+
+
 func _islands() -> void:
 	var shallow := smat("#3fd6c6", {"rough": 0.4})
 	var sand := smat("#f5dfa0", {"rough": 0.9})
 	var g1 := smat("#3fa34d")
 	var g2 := smat("#2f7d3a")
-	var isles := [[-70, -40, 16], [85, -110, 22], [-120, -210, 30], [60, -300, 18], [140, -380, 34], [-90, -430, 24],
-		[-170, -560, 40], [110, -620, 30], [0, -760, 60], [-60, 60, 18], [70, 30, 14], [200, -200, 40], [-230, -330, 44]]
-	for k in isles.size():
-		var it: Array = isles[k]
-		var x: float = it[0]
-		var z: float = it[1]
+	var trunk := smat("#8a5a2b")
+	for k in ISLES.size():
+		var it: Array = ISLES[k]
 		var r: float = it[2]
+		var c := at(float(it[0]), float(it[1]))
+		if HL.road_dist(c) < r * 1.6 + 8.0:
+			continue
+		var x := c.x
+		var z := c.z
 		Chars3D.cyl(self, r * 1.5, r * 1.6, 0.3, shallow, x, OCEAN_Y + 0.05, z, 22)
 		Chars3D.cyl(self, r * 1.05, r * 1.15, 1.4, sand, x, OCEAN_Y + 0.6, z, 18)
 		for j in 1 + k % 3:
@@ -197,7 +218,7 @@ func _islands() -> void:
 			var a := k * 1.3 + j * 2.1
 			var px := x + cos(a) * r * 0.95
 			var pz := z + sin(a) * r * 0.95
-			Chars3D.cyl(self, 0.35, 0.5, 6.0, smat("#8a5a2b"), px, OCEAN_Y + 4.0, pz, 6)
+			Chars3D.cyl(self, 0.35, 0.5, 6.0, trunk, px, OCEAN_Y + 4.0, pz, 6)
 			for q in 5:
 				Chars3D.box(self, 3.2, 0.15, 0.9, g1, Vector3(px + cos(q * 1.26) * 1.4, OCEAN_Y + 7.0, pz + sin(q * 1.26) * 1.4), Vector3(0, -q * 1.26, -0.4))
 
@@ -205,19 +226,23 @@ func _islands() -> void:
 func _clouds() -> void:
 	var cw := smat("#ffffff", {"rough": 1.0})
 	var cw2 := smat("#eef6fc", {"rough": 1.0})
-	var spots := [[-40, 18, -60, 6.0], [45, 24, -140, 8.0], [-60, 30, -260, 9.0], [55, 20, -330, 7.0], [-35, 26, -420, 8.0],
-		[70, 34, -520, 10.0], [-80, 40, -640, 12.0], [10, 50, -800, 16.0], [-25, 8, -180, 4.0], [30, 6, -460, 4.0], [90, 14, -40, 6.0]]
-	for k in spots.size():
-		var sp: Array = spots[k]
-		var g := Node3D.new()
-		g.position = Vector3(sp[0], sp[1], sp[2])
-		add_child(g)
+	for k in CLOUDS.size():
+		var sp: Array = CLOUDS[k]
 		var r: float = sp[3]
+		var c := at(float(sp[0]), float(sp[1]), float(sp[2]))
+		# alacsony felhő ne lógjon bele az útba
+		if c.y < 16.0 and HL.road_dist(c) < r * 1.8 + 6.0:
+			continue
+		var g := Node3D.new()
+		g.position = c
+		add_child(g)
 		for q in [[0, 0, 0, 1.0], [-0.9, -0.15, 0.2, 0.75], [0.95, -0.1, -0.1, 0.8], [0.35, 0.35, 0.25, 0.7], [-1.6, -0.3, -0.2, 0.5], [1.6, -0.3, 0.3, 0.5]]:
 			Chars3D.lsphere(g, r * q[3], cw if k % 2 == 0 else cw2, q[0] * r, q[1] * r, q[2] * r, 1.0, 0.7, 0.9, 9, 6)
 
 
 func _mm(mesh: Mesh, mat: Material, xf: Array) -> void:
+	if xf.is_empty():
+		return
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = mesh
@@ -230,39 +255,128 @@ func _mm(mesh: Mesh, mat: Material, xf: Array) -> void:
 	add_child(mi)
 
 
-func _deck(z0: float, z1: float) -> void:
-	var len := absf(z1 - z0)
-	var zc := (z0 + z1) / 2.0
-	Chars3D.box(self, HL.ROAD_W, 0.5, len, smat("#5a6070", {"rough": 0.85}), Vector3(0, -0.25, zc))
-	Chars3D.box(self, HL.ROAD_W + 0.6, 0.7, len, smat("#d9dde6", {"rough": 0.6}), Vector3(0, -0.85, zc))
-	for sx in [-1.0, 1.0]:
-		Chars3D.box(self, 0.14, 0.02, len, smat("#ffffff", {"rough": 0.5}), Vector3(sx * (HL.ROAD_W / 2.0 - 0.3), 0.005, zc))
-		# alacsony korlát
-		Chars3D.box(self, 0.18, 0.35, len, smat("#f1f3f5", {"rough": 0.5}), Vector3(sx * (HL.ROAD_W / 2.0 + 0.05), 0.25, zc))
-		Chars3D.box(self, 0.2, 0.08, len, smat("#e03131", {"rough": 0.5}), Vector3(sx * (HL.ROAD_W / 2.0 + 0.05), 0.46, zc))
+## Rögzítőpont az út keretében (s. mező): a gyerekei helyi koordinátában épülnek (x jobbra, -z előre).
+func _anchor(s: float, x := 0.0) -> Node3D:
+	var n := Node3D.new()
+	n.transform = HL.xf(s) * Transform3D(Basis(), Vector3(x, 0, 0))
+	add_child(n)
+	return n
+
+
+# ------------------------------------------------------------------ út
+const S_START := -7.0            # az úttest eleje (a rajtkapu mögött)
+const S_END := HL.GOAL + 12.0    # vége (az ünnepi tér után)
+const GAP_A := HL.CP_BRIDGE + 0.45            # a felvonóhíd rése az úttestben
+const GAP_B := HL.CP_BRIDGE + 0.55 + 0.95 / HL.SP
+const EXT_STEP := 0.25           # kihúzás felbontása (mező)
+const CHUNK := 24.0              # ennyi mezőnként külön háló (a kamerán kívülieket a motor kihagyja)
+const PIER_EVERY := 16           # pillérpár ennyi mezőnként
+
+
+## Profil tükrözése a középvonalra (a körüljárás is megfordul, hogy a normális kifelé nézzen).
+static func _mirror(prof: Array) -> Array:
+	var out: Array = []
+	for i in range(prof.size() - 1, -1, -1):
+		var p: Vector2 = prof[i]
+		out.append(Vector2(-p.x, p.y))
+	return out
+
+
+## Görbe menti kihúzás az s0..s1 szakaszon. A prof (x, y) pontsor az út keretében; a felület
+## normálisa minden szakaszon a haladási irány bal keze felé néz (a felső lapot balról jobbra kell
+## megadni, az oldalakat az óramutató járása szerint).
+func _extrude(prof: Array, s0: float, s1: float, m: Material) -> void:
+	var a := s0
+	while a < s1 - 0.001:
+		var b := minf(a + CHUNK, s1)
+		_extrude_chunk(prof, a, b, m)
+		a = b
+
+
+func _extrude_chunk(prof: Array, s0: float, s1: float, m: Material) -> void:
+	var steps := maxi(1, ceili((s1 - s0) / EXT_STEP))
+	var rings: Array = []
+	for i in steps + 1:
+		rings.append(HL.xf(lerpf(s0, s1, float(i) / steps)))
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for j in prof.size() - 1:
+		var pa: Vector2 = prof[j]
+		var pb: Vector2 = prof[j + 1]
+		var d := pb - pa
+		var nl := Vector3(-d.y, d.x, 0.0).normalized()
+		var la := Vector3(pa.x, pa.y, 0.0)
+		var lb := Vector3(pb.x, pb.y, 0.0)
+		for i in steps:
+			var t0: Transform3D = rings[i]
+			var t1: Transform3D = rings[i + 1]
+			var n0 := t0.basis * nl
+			var n1 := t1.basis * nl
+			# a Godot elülső lapja az óramutató járása szerinti
+			st.set_normal(n0)
+			st.add_vertex(t0 * la)
+			st.set_normal(n1)
+			st.add_vertex(t1 * la)
+			st.set_normal(n1)
+			st.add_vertex(t1 * lb)
+			st.set_normal(n0)
+			st.add_vertex(t0 * la)
+			st.set_normal(n1)
+			st.add_vertex(t1 * lb)
+			st.set_normal(n0)
+			st.add_vertex(t0 * lb)
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = m
+	add_child(mi)
+
+
+## A rés két oldalán (a felvonóhídnál megszakad az úttest).
+func _extrude2(prof: Array, m: Material, s0 := S_START, s1 := S_END) -> void:
+	_extrude(prof, s0, GAP_A, m)
+	_extrude(prof, GAP_B, s1, m)
 
 
 func _road() -> void:
-	var z_start := 10.0
-	var z_end := -(HL.GOAL * HL.SP + 18.0)
-	# a híd helyén rés van az úttestben
-	var gap_a := -(HL.CP_BRIDGE + 0.45) * HL.SP
-	var gap_b := -(HL.CP_BRIDGE + 0.55) * HL.SP - 0.95
-	_deck(z_start, gap_a)
-	_deck(gap_b, z_end)
+	var hw := HL.ROAD_W / 2.0
+	var asphalt := smat("#5a6070", {"rough": 0.85})
+	var concrete := smat("#d9dde6", {"rough": 0.6})
+	var under := smat("#b4bccb", {"rough": 0.7})
+	var white := smat("#ffffff", {"rough": 0.5})
+	var rail := smat("#f1f3f5", {"rough": 0.5})
+	var red := smat("#e03131", {"rough": 0.5})
+	# úttest (felső lap + oldalak), alatta a betonlemez és a két hosszanti tartógerenda
+	_extrude2([Vector2(-hw, -0.5), Vector2(-hw, 0.0), Vector2(hw, 0.0), Vector2(hw, -0.5)], asphalt)
+	var cw := hw + 0.3
+	_extrude2([Vector2(-cw, -1.2), Vector2(-cw, -0.5), Vector2(cw, -0.5), Vector2(cw, -1.2), Vector2(-cw, -1.2)], concrete)
+	for gx in [-2.4, 2.4]:
+		# teteje a lemez alatt rejtve: jobb oldal le, alja, bal oldal fel
+		_extrude2([Vector2(gx + 0.45, -1.2), Vector2(gx + 0.45, -2.2), Vector2(gx - 0.45, -2.2), Vector2(gx - 0.45, -1.2)], under)
+	# szélső fehér vonal és folyamatos korlát mindkét oldalon (a kanyarokat hézag nélkül követi)
+	var edge := [Vector2(hw - 0.37, 0.006), Vector2(hw - 0.23, 0.006)]
+	var wall := [Vector2(hw - 0.04, 0.0), Vector2(hw - 0.04, 0.42), Vector2(hw + 0.14, 0.42), Vector2(hw + 0.14, -0.5)]
+	var cap := [Vector2(hw - 0.06, 0.42), Vector2(hw - 0.06, 0.5), Vector2(hw + 0.16, 0.5), Vector2(hw + 0.16, 0.42)]
+	for prof in [edge, _mirror(edge)]:
+		_extrude2(prof, white)
+	for prof in [wall, _mirror(wall)]:
+		_extrude2(prof, rail)
+	for prof in [cap, _mirror(cap)]:
+		_extrude2(prof, red)
+	# az úttest két vége
+	for s in [S_START, S_END]:
+		var e := _anchor(s)
+		Chars3D.box(e, cw * 2.0, 1.2, 0.04, concrete, Vector3(0, -0.6, 0))
 	# szaggatott felezővonalak
 	var dash := BoxMesh.new()
 	dash.size = Vector3(0.1, 0.02, 1.2)
 	var xf: Array = []
-	var z := z_start
-	while z > z_end:
-		if z < gap_a + 0.1 and z > gap_b - 0.1:
-			z -= 3.0
-			continue
-		for lx in [-HL.ROAD_W / 4.0, 0.0, HL.ROAD_W / 4.0]:
-			xf.append(Transform3D(Basis(), Vector3(lx, 0.01, z)))
-		z -= 3.0
-	_mm(dash, smat("#ffffff", {"rough": 0.5}), xf)
+	var s := S_START + 1.0
+	while s < S_END - 1.0:
+		if s < GAP_A - 0.5 or s > GAP_B + 0.5:
+			for lx in [-hw / 2.0, 0.0, hw / 2.0]:
+				xf.append(HL.xf(s) * Transform3D(Basis(), Vector3(lx, 0.01, 0)))
+		s += 2.0
+	_mm(dash, white, xf)
 	# mezőhatárok: vékony keresztcsíkok, szélükön színes jelzőkockák
 	var line := BoxMesh.new()
 	line.size = Vector3(HL.ROAD_W - 0.8, 0.012, 0.05)
@@ -271,71 +385,227 @@ func _road() -> void:
 	var lines: Array = []
 	var cubes_a: Array = []
 	var cubes_b: Array = []
-	for s in range(0, HL.GOAL + 1):
-		var zz := -(s + 0.5) * HL.SP
-		if s != HL.CP_BRIDGE:
-			lines.append(Transform3D(Basis(), Vector3(0, 0.006, zz)))
-		var tf_l := Transform3D(Basis(), Vector3(-HL.ROAD_W / 2.0 + 0.1, 0.12, -s * HL.SP))
-		var tf_r := Transform3D(Basis(), Vector3(HL.ROAD_W / 2.0 - 0.1, 0.12, -s * HL.SP))
-		if s % 2 == 0:
-			cubes_a.append(tf_l)
-			cubes_a.append(tf_r)
-		else:
-			cubes_b.append(tf_l)
-			cubes_b.append(tf_r)
+	for i in range(0, HL.GOAL + 1):
+		var t := HL.xf(i)
+		if i != HL.CP_BRIDGE:
+			lines.append(HL.xf(i + 0.5) * Transform3D(Basis(), Vector3(0, 0.006, 0)))
+		var tf_l := t * Transform3D(Basis(), Vector3(-hw + 0.1, 0.12, 0))
+		var tf_r := t * Transform3D(Basis(), Vector3(hw - 0.1, 0.12, 0))
+		(cubes_a if i % 2 == 0 else cubes_b).append_array([tf_l, tf_r])
 	_mm(line, smat("#ffffff", {"alpha": 0.35, "unshaded": true}), lines)
 	_mm(cube, smat("#ffd43b", {"rough": 0.4}), cubes_a)
 	_mm(cube, smat("#4dabf7", {"rough": 0.4}), cubes_b)
-	# pillérek az óceánba
+	_piers()
+	_special_tiles()
+	# minden 10. mező száma az út szélén
+	for i in range(10, HL.GOAL, 10):
+		if HL.specials().has(i):
+			continue
+		var lab := _flat_label(str(i), 80, 0.008)
+		lab.modulate = Color(1, 1, 1, 0.85)
+		lab.transform = HL.xf(i) * Transform3D(Basis(Vector3.RIGHT, -PI / 2), Vector3(-hw + 0.9, 0.02, 0))
+		add_child(lab)
+
+
+## Pillérpárok a hullámokba: fejgerenda a tartógerendák alatt, két oszlop, hab a víz színén.
+## Az út irányába forgatva, így a kanyarokban is pontosan az úttest alatt állnak.
+func _piers() -> void:
+	var col_h := -2.7 - (OCEAN_Y - 0.5)
 	var pil := CylinderMesh.new()
 	pil.top_radius = 0.55
 	pil.bottom_radius = 0.8
-	pil.height = absf(OCEAN_Y) + 1.0
+	pil.height = col_h
 	pil.radial_segments = 10
-	var pils: Array = []
-	var foam: Array = []
-	z = 0.0
-	while z > z_end:
-		for sx in [-1.0, 1.0]:
-			pils.append(Transform3D(Basis(), Vector3(sx * (HL.ROAD_W / 2.0 - 0.9), OCEAN_Y / 2.0 - 0.6, z)))
-			foam.append(Transform3D(Basis(), Vector3(sx * (HL.ROAD_W / 2.0 - 0.9), OCEAN_Y + 0.05, z)))
-		z -= 24.0
-	_mm(pil, smat("#c9cfdb", {"rough": 0.6}), pils)
+	var head := BoxMesh.new()
+	head.size = Vector3(HL.ROAD_W - 0.6, 0.5, 1.3)
+	var brace := BoxMesh.new()
+	brace.size = Vector3(0.35, 0.35, col_h * 0.55)
 	var fm := CylinderMesh.new()
 	fm.top_radius = 1.5
 	fm.bottom_radius = 1.5
 	fm.height = 0.1
 	fm.radial_segments = 14
+	var pils: Array = []
+	var heads: Array = []
+	var braces: Array = []
+	var foam: Array = []
+	var s := 0
+	while s < S_END:
+		if absf(s - HL.CP_BRIDGE) > 2.0:
+			var t := HL.xf(s)
+			heads.append(t * Transform3D(Basis(), Vector3(0, -2.45, 0)))
+			for sx in [-1.0, 1.0]:
+				var x: float = sx * 2.4
+				pils.append(t * Transform3D(Basis(), Vector3(x, -2.7 - col_h / 2.0, 0)))
+				foam.append(t * Transform3D(Basis(), Vector3(x, OCEAN_Y + 0.05, 0)))
+			# keresztmerevítő a két oszlop között (X alakban)
+			for k in [-1.0, 1.0]:
+				braces.append(t * Transform3D(Basis(Vector3.FORWARD, k * 0.52) * Basis(Vector3.RIGHT, PI / 2), Vector3(0, -2.7 - col_h * 0.42, 0)))
+		s += PIER_EVERY
+	var conc := smat("#c9cfdb", {"rough": 0.6})
+	_mm(pil, conc, pils)
+	_mm(head, smat("#b4bccb", {"rough": 0.6}), heads)
+	_mm(brace, conc, braces)
 	_mm(fm, smat("#ffffff", {"alpha": 0.7, "unshaded": true}), foam)
-	# különleges mezők: színes lap, rajta felirat
-	for s in HL.SPECIALS:
-		var sp: Array = HL.SPECIALS[s]
-		var info: Dictionary = HL.INFO[sp[0]]
-		var zz := -float(s) * HL.SP
-		Chars3D.box(self, HL.ROAD_W - 0.7, 0.03, HL.SP * 0.86, smat(info.col, {"rough": 0.45, "emit": info.col, "emit_e": 0.25}), Vector3(0, 0.016, zz))
-		var lab := Label3D.new()
-		lab.text = _space_text(sp)
-		lab.font = D.font
-		lab.font_size = 96
-		lab.pixel_size = 0.009
-		lab.outline_size = 18
-		lab.outline_modulate = Color(0, 0, 0, 0.35)
-		lab.rotation = Vector3(-PI / 2, 0, 0)
-		lab.position = Vector3(0, 0.04, zz)
+
+
+func _flat_label(text: String, size: int, px: float) -> Label3D:
+	var lab := Label3D.new()
+	lab.text = text
+	lab.font = D.font
+	lab.font_size = size
+	lab.pixel_size = px
+	# távolról úgyis olvashatatlan: ott nem rajzoljuk
+	lab.visibility_range_end = 130.0
+	lab.visibility_range_end_margin = 20.0
+	lab.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	return lab
+
+
+# ------------------------------------------------------------------ különleges mezők
+## Színes lap felirattal, mellette mindkét oldalon a típus jele: nyíl (hátszél), figyelmeztető háromszög
+## (szembeszél), dobókocka (kockamezők), arany keret és dupla nyíl (felzárkózó), világító gyűrű (UFO),
+## rakéta, keresztbe tett kardok (párbaj). Egy típus minden darabja egy MultiMeshben.
+func _special_tiles() -> void:
+	var hw := HL.ROAD_W / 2.0
+	var tile := BoxMesh.new()
+	tile.size = Vector3(HL.ROAD_W - 0.7, 0.03, HL.SP * 0.86)
+	var arm := BoxMesh.new()
+	arm.size = Vector3(0.14, 0.03, 0.62)
+	var tri := _tri_mesh(0.42)
+	var small_tri := _tri_mesh(0.2)
+	var bar := BoxMesh.new()
+	bar.size = Vector3(0.08, 0.03, 0.26)
+	var dot := BoxMesh.new()
+	dot.size = Vector3(0.08, 0.03, 0.08)
+	var face := BoxMesh.new()
+	face.size = Vector3(0.66, 0.03, 0.66)
+	var pip := CylinderMesh.new()
+	pip.top_radius = 0.07
+	pip.bottom_radius = 0.07
+	pip.height = 0.02
+	pip.radial_segments = 8
+	pip.rings = 1
+	var frame_l := BoxMesh.new()
+	frame_l.size = Vector3(0.12, 0.05, HL.SP * 0.86)
+	var frame_w := BoxMesh.new()
+	frame_w.size = Vector3(HL.ROAD_W - 0.7, 0.05, 0.12)
+	var body := BoxMesh.new()
+	body.size = Vector3(0.24, 0.03, 0.46)
+	var ring := Chars3D.torus(0.3, 0.06)
+	var sword := BoxMesh.new()
+	sword.size = Vector3(0.09, 0.03, 0.74)
+	var glow_white := smat("#ffffff", {"emit": "#ffffff", "emit_e": 0.6, "rough": 0.4})
+	var mats := {
+		"white": glow_white,
+		"dark": smat("#1d1f26", {"rough": 0.5}),
+		"warn": smat("#ffd43b", {"emit": "#ffc61a", "emit_e": 0.5, "rough": 0.4}),
+		"gold": smat("#ffe066", {"emit": "#ffc61a", "emit_e": 1.4, "rough": 0.3, "metal": 0.3}),
+		"pip_b": smat("#1546a8", {"rough": 0.4}),
+		"pip_r": smat("#a51111", {"rough": 0.4}),
+		"ufo": smat("#7df9ff", {"emit": "#3bc9db", "emit_e": 2.2, "rough": 0.3}),
+		"flame": smat("#ffd43b", {"emit": "#ff922b", "emit_e": 1.5, "rough": 0.4}),
+	}
+	var parts := {}   # kulcs -> [mesh, anyag, transzformok]
+	var add := func(key: String, mesh: Mesh, mk: String, t: Transform3D) -> void:
+		if not parts.has(key):
+			parts[key] = [mesh, mats[mk], []]
+		parts[key][2].append(t)
+	var tiles := {}   # típus -> [transzformok]
+	var sp_all := HL.specials()
+	for s in sp_all:
+		var sp: Array = sp_all[s]
+		var kind: String = sp[0]
+		var val: int = sp[1]
+		var t := HL.xf(float(s))
+		if not tiles.has(kind):
+			tiles[kind] = []
+		tiles[kind].append(t * Transform3D(Basis(), Vector3(0, 0.016, 0)))
+		for sx in [-1.0, 1.0]:
+			var ic := t * Transform3D(Basis(), Vector3(sx * (hw - 1.2), 0.04, 0))
+			match kind:
+				"F", "B", "LAST":
+					# előre (hátszél, felzárkózó) vagy hátra (szembeszél) mutató nyílhegyek
+					var dir := -1.0 if kind == "B" else 1.0
+					var zs: Array = [-0.28, 0.14] if (val >= 20 or kind == "LAST") else [-0.07]
+					if kind == "B":
+						# figyelmeztető háromszög, benne felkiáltójel; −20-nál mögötte egy visszafelé nyíl
+						var zt := -0.14 if val >= 20 else 0.05
+						add.call("tri", tri, "warn", ic * Transform3D(Basis(), Vector3(0, -0.005, zt)))
+						add.call("bar", bar, "dark", ic * Transform3D(Basis(), Vector3(0, 0.005, zt - 0.04)))
+						add.call("dot", dot, "dark", ic * Transform3D(Basis(), Vector3(0, 0.005, zt + 0.15)))
+						zs = [0.3] if val >= 20 else []
+					var mk := "gold" if kind == "LAST" else "white"
+					for zc in zs:
+						for side in [-1.0, 1.0]:
+							var off := Vector3(side * 0.212, 0.0, float(zc) - 0.088 * dir)
+							add.call("chev_" + mk, arm, mk, ic * Transform3D(Basis(Vector3.UP, side * dir * PI / 4.0), off))
+				"BD", "RD":
+					add.call("face", face, "white", ic)
+					var pk := "pip_b" if kind == "BD" else "pip_r"
+					var pts := [Vector2(-0.18, -0.18), Vector2(0.18, 0.18), Vector2(-0.18, 0.18), Vector2(0.18, -0.18), Vector2.ZERO] if val <= 5 \
+						else [Vector2(-0.18, -0.2), Vector2(-0.18, 0.0), Vector2(-0.18, 0.2), Vector2(0.18, -0.2), Vector2(0.18, 0.0), Vector2(0.18, 0.2)]
+					for q in pts:
+						add.call(pk, pip, pk, ic * Transform3D(Basis(), Vector3(q.x, 0.02, q.y)))
+				"UFO":
+					add.call("ring", ring, "ufo", ic)
+					add.call("dot_u", dot, "ufo", ic * Transform3D(Basis().scaled(Vector3(1.6, 1, 1.6)), Vector3.ZERO))
+				"ROCKET":
+					add.call("nose", small_tri, "white", ic * Transform3D(Basis(), Vector3(0, 0, -0.33)))
+					add.call("body", body, "white", ic * Transform3D(Basis(), Vector3(0, 0, 0.0)))
+					add.call("fire", small_tri, "flame", ic * Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 0.36)))
+				"DUEL":
+					for k in [-1.0, 1.0]:
+						add.call("sword", sword, "white", ic * Transform3D(Basis(Vector3.UP, k * PI / 4.0), Vector3.ZERO))
+		if kind == "LAST":
+			for sx in [-1.0, 1.0]:
+				add.call("frame_l", frame_l, "gold", t * Transform3D(Basis(), Vector3(sx * (hw - 0.41), 0.03, 0)))
+				add.call("frame_w", frame_w, "gold", t * Transform3D(Basis(), Vector3(0, 0.03, sx * HL.SP * 0.43)))
+		var lab := _flat_label(_space_text(sp), 150 if kind in ["F", "B"] else 96, 0.009)
+		lab.outline_size = 22
+		lab.outline_modulate = Color(0, 0, 0, 0.45)
+		lab.transform = t * Transform3D(Basis(Vector3.RIGHT, -PI / 2), Vector3(0, 0.05, 0))
 		add_child(lab)
-	# minden 10. mező száma az út szélén
-	for s in range(10, HL.GOAL, 10):
-		if HL.SPECIALS.has(s):
+	for kind in tiles:
+		var col: String = HL.INFO[kind].col
+		var e := 0.55 if kind in ["LAST", "UFO"] else 0.3
+		_mm(tile, smat(col, {"rough": 0.45, "emit": col, "emit_e": e}), tiles[kind])
+	for key in parts:
+		_mm(parts[key][0], parts[key][1], parts[key][2])
+	_run_strips()
+
+
+## Lapos, előre (-z) mutató egyenlő oldalú háromszög (felülről látszik), r = a csúcsok távolsága a középtől.
+static func _tri_mesh(r: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_normal(Vector3.UP)
+	for v in [Vector3(0, 0, -r), Vector3(r * 0.866, 0, r * 0.5), Vector3(-r * 0.866, 0, r * 0.5)]:
+		st.add_vertex(v)
+	return st.commit()
+
+
+## A legalább háromtagú hátszél-/szembeszél-csoportok mentén a korlát teteje zölden / pirosan világít,
+## így a csoport már messziről látszik.
+func _run_strips() -> void:
+	var hw := HL.ROAD_W / 2.0
+	var strip := [Vector2(hw - 0.07, 0.5), Vector2(hw - 0.07, 0.56), Vector2(hw + 0.17, 0.56), Vector2(hw + 0.17, 0.5)]
+	var sp_all := HL.specials()
+	var s := 1
+	while s < HL.GOAL:
+		var sp: Array = sp_all.get(s, [])
+		if sp.is_empty() or not (sp[0] in ["F", "B"]):
+			s += 1
 			continue
-		var lab := Label3D.new()
-		lab.text = str(s)
-		lab.font = D.font
-		lab.font_size = 80
-		lab.pixel_size = 0.008
-		lab.modulate = Color(1, 1, 1, 0.85)
-		lab.rotation = Vector3(-PI / 2, 0, 0)
-		lab.position = Vector3(-HL.ROAD_W / 2.0 + 0.9, 0.02, -float(s) * HL.SP)
-		add_child(lab)
+		var e := s
+		while sp_all.has(e + 1) and sp_all[e + 1][0] == sp[0]:
+			e += 1
+		if e - s + 1 >= 3:
+			var col: String = HL.INFO[sp[0]].col
+			var m := smat(col, {"emit": col, "emit_e": 1.6, "rough": 0.4})
+			for prof in [strip, _mirror(strip)]:
+				_extrude(prof, s - 0.5, e + 0.5, m)
+		s = e + 1
 
 
 static func _space_text(sp: Array) -> String:
@@ -351,33 +621,35 @@ static func _space_text(sp: Array) -> String:
 	return ""
 
 
-func _tower(x: float, z: float, h: float) -> void:
+func _tower(parent: Node3D, x: float, z: float, h: float) -> void:
 	var stripe := smat("#ffc61a", {"rough": 0.45})
 	var dark := smat("#2b2f3a", {"rough": 0.5, "metal": 0.4})
-	Chars3D.box(self, 0.8, h, 0.8, smat("#e8590c", {"rough": 0.5}), Vector3(x, h / 2.0 - 0.5, z))
+	Chars3D.box(parent, 0.8, h, 0.8, smat("#e8590c", {"rough": 0.5}), Vector3(x, h / 2.0 - 0.5, z))
 	for k in int(h / 0.8):
-		Chars3D.box(self, 0.84, 0.18, 0.84, stripe if k % 2 == 0 else dark, Vector3(x, 0.1 + k * 0.8, z))
-	Chars3D.sphere(self, 0.28, smat("#ff3b30", {"emit": "#ff3b30", "emit_e": 1.5}), x, h - 0.3, z)
+		Chars3D.box(parent, 0.84, 0.18, 0.84, stripe if k % 2 == 0 else dark, Vector3(x, 0.1 + k * 0.8, z))
+	Chars3D.sphere(parent, 0.28, smat("#ff3b30", {"emit": "#ff3b30", "emit_e": 1.5}), x, h - 0.3, z)
 
 
 ## Felvonóhíd a 100. mező után: a lap a túlsó végén forog, zárva függőleges fal.
 func _bridge() -> void:
-	var z0 := -(HL.CP_BRIDGE + 0.45) * HL.SP
-	var z1 := -(HL.CP_BRIDGE + 0.55) * HL.SP - 0.95
+	var a := _anchor((GAP_A + GAP_B) / 2.0)
+	var half := (GAP_B - GAP_A) * HL.SP / 2.0
+	var z0 := half
+	var z1 := -half
 	for sx in [-1.0, 1.0]:
-		_tower(sx * (HL.ROAD_W / 2.0 + 0.8), (z0 + z1) / 2.0, 4.2)
-	Chars3D.box(self, HL.ROAD_W + 2.4, 0.4, 0.5, smat("#e8590c"), Vector3(0, 3.9, (z0 + z1) / 2.0))
+		_tower(a, sx * (HL.ROAD_W / 2.0 + 0.8), 0.0, 4.2)
+	Chars3D.box(a, HL.ROAD_W + 2.4, 0.4, 0.5, smat("#e8590c"), Vector3(0, 3.9, 0))
 	var lab := Label3D.new()
 	lab.text = "FELVONÓHÍD"
 	lab.font = D.font
 	lab.font_size = 90
 	lab.pixel_size = 0.01
 	lab.outline_size = 16
-	lab.position = Vector3(0, 4.5, (z0 + z1) / 2.0)
-	add_child(lab)
+	lab.position = Vector3(0, 4.5, 0)
+	a.add_child(lab)
 	bridge_leaf = Node3D.new()
 	bridge_leaf.position = Vector3(0, 0, z1)
-	add_child(bridge_leaf)
+	a.add_child(bridge_leaf)
 	var leaf_len := absf(z1 - z0)
 	Chars3D.box(bridge_leaf, HL.ROAD_W, 0.3, leaf_len, smat("#7b8496", {"rough": 0.6, "metal": 0.3}), Vector3(0, -0.15, leaf_len / 2.0))
 	for k in 6:
@@ -389,11 +661,11 @@ func _bridge() -> void:
 
 ## Jelzőlámpás kapu a 200. mező után: kapukeret, piros és zöld lámpák, felcsapódó sorompó.
 func _light_gate() -> void:
-	var z := -(HL.CP_LIGHTS + 0.5) * HL.SP
+	var a := _anchor(HL.CP_LIGHTS + 0.5)
 	var frame := smat("#343a46", {"rough": 0.4, "metal": 0.5})
 	for sx in [-1.0, 1.0]:
-		Chars3D.box(self, 0.7, 5.2, 0.7, frame, Vector3(sx * (HL.ROAD_W / 2.0 + 0.5), 2.1, z))
-	Chars3D.box(self, HL.ROAD_W + 1.8, 0.7, 0.8, frame, Vector3(0, 4.9, z))
+		Chars3D.box(a, 0.7, 5.2, 0.7, frame, Vector3(sx * (HL.ROAD_W / 2.0 + 0.5), 2.1, 0))
+	Chars3D.box(a, HL.ROAD_W + 1.8, 0.7, 0.8, frame, Vector3(0, 4.9, 0))
 	var red := StandardMaterial3D.new()
 	red.albedo_color = Color("#5c1010")
 	red.emission_enabled = true
@@ -405,12 +677,12 @@ func _light_gate() -> void:
 	gate_lamps = [red, green]
 	for k in 4:
 		var x := -2.4 + k * 1.6
-		Chars3D.box(self, 1.0, 1.9, 0.6, smat("#1d1f26"), Vector3(x, 4.1, z + 0.5))
-		Chars3D.sphere(self, 0.34, red, x, 4.55, z + 0.82)
-		Chars3D.sphere(self, 0.34, green, x, 3.7, z + 0.82)
+		Chars3D.box(a, 1.0, 1.9, 0.6, smat("#1d1f26"), Vector3(x, 4.1, 0.5))
+		Chars3D.sphere(a, 0.34, red, x, 4.55, 0.82)
+		Chars3D.sphere(a, 0.34, green, x, 3.7, 0.82)
 	gate_boom = Node3D.new()
-	gate_boom.position = Vector3(-HL.ROAD_W / 2.0 - 0.1, 1.0, z + 0.4)
-	add_child(gate_boom)
+	gate_boom.position = Vector3(-HL.ROAD_W / 2.0 - 0.1, 1.0, 0.4)
+	a.add_child(gate_boom)
 	var stripe := smat("#ffffff", {"rough": 0.5})
 	var stripe2 := smat("#e03131", {"rough": 0.5})
 	for k in 8:
@@ -419,44 +691,45 @@ func _light_gate() -> void:
 
 ## Célkapu a 351. mezőnél: arany boltív, CÉL felirat, kétszárnyú kapu.
 func _final_gate() -> void:
-	var z := -(HL.GOAL + 0.6) * HL.SP
+	var a := _anchor(HL.GOAL + 0.6)
 	var gold := smat("#ffc61a", {"rough": 0.3, "metal": 0.4})
 	var red := smat("#e03131", {"rough": 0.4})
 	for sx in [-1.0, 1.0]:
-		Chars3D.cyl(self, 0.7, 0.8, 8.0, gold, sx * (HL.ROAD_W / 2.0 + 0.7), 3.5, z, 12)
-		Chars3D.sphere(self, 0.9, red, sx * (HL.ROAD_W / 2.0 + 0.7), 7.8, z)
+		Chars3D.cyl(a, 0.7, 0.8, 8.0, gold, sx * (HL.ROAD_W / 2.0 + 0.7), 3.5, 0, 12)
+		Chars3D.sphere(a, 0.9, red, sx * (HL.ROAD_W / 2.0 + 0.7), 7.8, 0)
 	var arch := MeshInstance3D.new()
 	arch.mesh = Chars3D.arc_tube(HL.ROAD_W / 2.0 + 0.7, 0.45, PI, 28, 8)
 	arch.material_override = gold
-	arch.position = Vector3(0, 7.5, z)
-	add_child(arch)
-	Chars3D.box(self, 5.0, 1.3, 0.3, red, Vector3(0, 9.4, z))
+	arch.position = Vector3(0, 7.5, 0)
+	a.add_child(arch)
+	Chars3D.box(a, 5.0, 1.3, 0.3, red, Vector3(0, 9.4, 0))
 	var lab := Label3D.new()
 	lab.text = "CÉL"
 	lab.font = D.font
 	lab.font_size = 150
 	lab.pixel_size = 0.012
 	lab.outline_size = 22
-	lab.position = Vector3(0, 9.4, z + 0.2)
-	add_child(lab)
+	lab.position = Vector3(0, 9.4, 0.2)
+	a.add_child(lab)
 	for sx in [-1.0, 1.0]:
 		var d := Node3D.new()
-		d.position = Vector3(sx * HL.ROAD_W / 2.0, 0, z)
-		add_child(d)
+		d.position = Vector3(sx * HL.ROAD_W / 2.0, 0, 0)
+		a.add_child(d)
 		var w := HL.ROAD_W / 2.0
 		Chars3D.box(d, w, 3.2, 0.25, smat("#ffffff", {"rough": 0.4}), Vector3(-sx * w / 2.0, 1.6, 0))
 		for k in 4:
 			Chars3D.box(d, w / 4.0, 0.5, 0.27, red, Vector3(-sx * (k + 0.5) * w / 4.0, 0.4 + (k % 2) * 2.2, 0))
 		final_doors.append({"n": d, "sx": sx})
 	# a kapu mögött egy kis ünnepi tér
-	Chars3D.cyl(self, 7.5, 7.5, 0.5, smat("#ffe8a3", {"rough": 0.6}), 0, -0.25, z - 9.0, 32)
+	Chars3D.cyl(a, 7.5, 7.5, 0.5, smat("#ffe8a3", {"rough": 0.6}), 0, -0.25, -9.0, 32)
 
 
 func _start_arch() -> void:
+	var a := _anchor(0.0)
 	var blue := smat("#1c7ed6", {"rough": 0.4})
 	for sx in [-1.0, 1.0]:
-		Chars3D.box(self, 0.6, 10.0, 0.6, blue, Vector3(sx * (HL.ROAD_W / 2.0 + 0.4), 4.5, 3.0))
-	Chars3D.box(self, HL.ROAD_W + 1.4, 1.1, 0.5, blue, Vector3(0, 9.6, 3.0))
+		Chars3D.box(a, 0.6, 10.0, 0.6, blue, Vector3(sx * (HL.ROAD_W / 2.0 + 0.4), 4.5, 3.0))
+	Chars3D.box(a, HL.ROAD_W + 1.4, 1.1, 0.5, blue, Vector3(0, 9.6, 3.0))
 	var lab := Label3D.new()
 	lab.text = "RAJT · ÓCEÁNSZTRÁDA"
 	lab.font = D.font
@@ -464,10 +737,10 @@ func _start_arch() -> void:
 	lab.pixel_size = 0.009
 	lab.outline_size = 14
 	lab.position = Vector3(0, 9.6, 3.3)
-	add_child(lab)
+	a.add_child(lab)
 	# kockás rajtvonal
 	for k in 16:
-		Chars3D.box(self, HL.ROAD_W / 16.0, 0.02, 0.5, smat("#ffffff" if k % 2 == 0 else "#1d1f26"), Vector3(-HL.ROAD_W / 2.0 + (k + 0.5) * HL.ROAD_W / 16.0, 0.012, 0.6))
+		Chars3D.box(a, HL.ROAD_W / 16.0, 0.02, 0.5, smat("#ffffff" if k % 2 == 0 else "#1d1f26"), Vector3(-HL.ROAD_W / 2.0 + (k + 0.5) * HL.ROAD_W / 16.0, 0.012, 0.6))
 
 
 ## Nézőcsoportok kis kiugró teraszokon, zászlókkal. Csak díszlet: soha nem versenyzők.
@@ -477,9 +750,7 @@ func _crowds() -> void:
 	var k := 0
 	for s in range(12, HL.GOAL, 26):
 		var side := -1.0 if k % 2 == 0 else 1.0
-		var g := Node3D.new()
-		g.position = Vector3(side * (HL.ROAD_W / 2.0 + 2.1), 0, -float(s) * HL.SP)
-		add_child(g)
+		var g := _anchor(float(s), side * (HL.ROAD_W / 2.0 + 2.1))
 		Chars3D.box(g, 3.2, 0.4, 4.2, smat("#d9dde6"), Vector3(0, -0.2, 0))
 		Chars3D.box(g, 0.12, 3.2, 0.12, smat("#adb5bd"), Vector3(side * 1.4, 1.4, -1.9))
 		var flag := Chars3D.box(g, 0.04, 0.9, 1.4, smat(shirts[k % shirts.size()], {"rough": 0.6}), Vector3(side * 1.4, 2.6, -1.2))
@@ -643,12 +914,21 @@ static func ufo_frame(a: Vector3, b: Vector3, tt: float) -> Dictionary:
 	return {"ufo": u, "pawn": pawn, "beam": bm}
 
 
+## Vízszintes, a-ból b felé nézve jobbra mutató egységvektor (ha egy helyben: az út jobbja).
+static func _flat_right(a: Vector3, b: Vector3) -> Vector3:
+	var d := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	if d.length() < 0.01:
+		return HL.right(HL.s_of(a))
+	d = d.normalized()
+	return Vector3(-d.z, 0.0, d.x)
+
+
 const UFO_DUR := 4.9
 const ROCKET_DUR := 4.6
 
 
 static func rocket_frame(a: Vector3, b: Vector3, tt: float) -> Dictionary:
-	var side := Vector3(-1.4, 0, 0)
+	var side := -1.4 * _flat_right(a, b)
 	var r := a + side
 	var pawn := a
 	var fire := 0.0
@@ -886,7 +1166,8 @@ func _render_carry(c, now: float) -> void:
 		var f := rocket_frame(c.a, c.b, tt)
 		rocket.visible = f.vis
 		rocket.position = f.rocket
-		rocket.rotation = Vector3(-float(f.tilt), 0, 0)
+		var r := _flat_right(c.a, c.b)
+		rocket.rotation = Vector3(-float(f.tilt), atan2(r.z, -r.x) + PI, 0)
 		flame.visible = f.fire > 0.0
 		flame.scale = Vector3.ONE * (0.6 + 0.6 * float(f.fire)) * (0.85 + 0.15 * sin(t * 40.0))
 		if f.fire > 0.5 and fmod(t, 0.06) < 0.02:
@@ -1031,10 +1312,10 @@ func _render_dolphins(dt: float) -> void:
 		for d in dolphins:
 			if t - float(d.t0) > float(d.dur):
 				var side := -1.0 if FX.f() < 0.5 else 1.0
-				var z: float = cam_look.z - FX.fr(4.0, 26.0)
-				var x := side * FX.fr(9.0, 22.0)
-				d.a = Vector3(x, OCEAN_Y - 0.5, z + 4.0)
-				d.b = Vector3(x + side * FX.fr(-2.0, 2.0), OCEAN_Y - 0.5, z - 4.0)
+				var s := cam_s + FX.fr(3.0, 17.0)
+				var x := side * FX.fr(9.0, 18.0)
+				d.a = at(s - 2.7, x, OCEAN_Y - 0.5)
+				d.b = at(s + 2.7, x + side * FX.fr(-2.0, 2.0), OCEAN_Y - 0.5)
 				d.t0 = t
 				d.dur = FX.fr(1.4, 1.9)
 				break
@@ -1054,41 +1335,64 @@ func _render_dolphins(dt: float) -> void:
 
 
 # ------------------------------------------------------------------ kamera
-func cam_follow(pos: Vector3, zoom := "near", speed := 2.5) -> void:
+## A kamera a figura mögött, kicsit jobbra-fölötte áll, és az út irányával együtt fordul (lassan,
+## hogy a kanyarokban se ugorjon); kicsit előre néz, hogy a következő kanyar is látsszon.
+## s: hol jár a figura az út mentén (ha nincs megadva, a legközelebbi útpontból számolja).
+func cam_follow(pos: Vector3, zoom := "near", speed := 2.5, s := NAN) -> void:
+	if is_nan(s):
+		s = HL.s_of(pos)
 	cam_speed = speed
-	var z := {"close": Vector3(3.2, 3.4, 6.4), "near": Vector3(4.5, 5.2, 9.6), "mid": Vector3(6.0, 8.0, 14.0)}
-	cam_look_t = pos + Vector3(0, 1.0, -3.0)
+	var z := {"close": Vector3(3.2, 3.4, 6.4), "near": Vector3(4.5, 5.2, 9.6), "mid": Vector3(6.0, 8.5, 15.0)}
+	var ahead := 2.0 if zoom == "close" else 3.0
+	cam_look_t = pos + Vector3(0, 1.0, 0) + HL.fwd(s + ahead) * ahead
+	cam_yaw_t = HL.heading(s + ahead * 1.5)
 	cam_off_t = z.get(zoom, z.near)
+	cam_s = s
 
 
-## Mindenki látszik: a leghátsó és a legelső közé néz.
+## Mindenki látszik: a leghátsó és a legelső közötti útszakasz köré, annak átlagos irányából.
 func cam_span(a: float, b: float, speed := 1.6) -> void:
 	cam_speed = speed
-	var span := absf(b - a) * HL.SP
-	var mid := HL.pos((a + b) / 2.0)
-	cam_look_t = mid + Vector3(0, 0.8, -2.0)
-	var d := clampf(span * 0.55 + 9.0, 10.0, 70.0)
+	var lo := minf(a, b)
+	var hi := maxf(a, b)
+	var box := AABB(HL.pos(lo), Vector3.ZERO)
+	var k := lo
+	while k < hi:
+		box = box.expand(HL.pos(k))
+		k += 4.0
+	box = box.expand(HL.pos(hi))
+	var mid := (lo + hi) / 2.0
+	cam_look_t = box.get_center() + Vector3(0, 0.8, 0) + HL.fwd(mid) * 2.0
+	var d := clampf(box.size.length() * 0.62 + 9.0, 10.0, 80.0)
+	cam_yaw_t = HL.heading(mid)
 	cam_off_t = Vector3(d * 0.42, d * 0.55, d * 0.85)
+	cam_s = mid
 
 
-func cam_at(look: Vector3, off: Vector3, speed := 2.0) -> void:
+## look: világpont; off: eltolás az út keretében (x jobbra, y fel, z hátra), yaw: a keret iránya.
+func cam_at(look: Vector3, off: Vector3, speed := 2.0, yaw := NAN) -> void:
 	cam_speed = speed
 	cam_look_t = look
 	cam_off_t = off
+	cam_yaw_t = HL.heading(HL.s_of(look)) if is_nan(yaw) else yaw
+	cam_s = HL.s_of(look)
 
 
 func cam_snap() -> void:
 	cam_look = cam_look_t
 	cam_off = cam_off_t
+	cam_yaw = cam_yaw_t
 
 
 func _update_camera(dt: float) -> void:
 	var k := 1.0 - exp(-dt * cam_speed)
 	cam_look = cam_look.lerp(cam_look_t, k)
 	cam_off = cam_off.lerp(cam_off_t, k)
+	# a forgás lassabb, mint a követés: a kanyarban fokozatosan fordul be
+	cam_yaw = lerp_angle(cam_yaw, cam_yaw_t, 1.0 - exp(-dt * minf(cam_speed, 2.2)))
 	shake = maxf(0.0, shake - dt * 2.0)
 	var sh := Vector3(FX.fr(-1, 1), FX.fr(-1, 1), 0) * shake * 0.15
-	camera.position = cam_look + cam_off + sh
+	camera.position = cam_look + Basis(Vector3.UP, -cam_yaw) * cam_off + sh
 	camera.look_at(cam_look + sh * 0.5, Vector3.UP)
 
 

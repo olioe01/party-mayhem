@@ -100,7 +100,7 @@ func _to_minigame() -> void:
 func _intro() -> void:
 	for i in G.players.size():
 		G.players[i].hw_lane = i
-	h3.cam_follow(HL.pos(0), "mid", 3.0)
+	h3.cam_follow(HL.pos(0), "mid", 3.0, 0)
 	h3.cam_snap()
 	_render(0.0)
 	Audio.jingle("start")
@@ -112,13 +112,13 @@ func _intro() -> void:
 		parts.append("%d.: %d" % [i + 1, r[i]])
 	await toast("🎲 A kockákat a minijáték osztja", "Minden kör minijátékkal kezdődik. Kockák: " + " · ".join(parts), 4.0)
 	await toast("✨ Egyforma kockák = +%d kocka" % HL.MATCH_BONUS, "Ha minden kockád ugyanazt mutatja, még %d kockával dobsz!" % HL.MATCH_BONUS, 3.2)
-	h3.cam_follow(HL.pos(HL.CP_BRIDGE), "mid", 1.4)
+	h3.cam_follow(HL.pos(HL.CP_BRIDGE), "mid", 1.4, HL.CP_BRIDGE)
 	await toast("🌉 100: Felvonóhíd", "Egy kockával páratlan kell (1, 3, 5) – ha nem sikerül, egyet visszalépsz.", 3.4)
-	h3.cam_follow(HL.pos(HL.CP_LIGHTS), "mid", 1.4)
+	h3.cam_follow(HL.pos(HL.CP_LIGHTS), "mid", 1.4, HL.CP_LIGHTS)
 	await toast("🚦 200: Jelzőlámpás kapu", "%d lámpakockából legalább egy legyen zöld! Utána az utolsó helyezett választ minijátékot." % HL.LIGHT_DICE, 3.6)
-	h3.cam_follow(HL.pos(HL.GOAL), "mid", 1.4)
+	h3.cam_follow(HL.pos(HL.GOAL), "mid", 1.4, HL.GOAL)
 	await toast("🏁 %d: Célkapu" % HL.GOAL, "%d kockával legalább %d kell (ha elsőre nem megy, utána %d). Ha nem sikerül: %d mezőt vissza." % [HL.FINAL_DICE, HL.FINAL_NEED[0], HL.FINAL_NEED[1], HL.FINAL_FAIL_BACK], 4.0)
-	h3.cam_follow(HL.pos(0), "mid", 1.6)
+	h3.cam_follow(HL.pos(0), "mid", 1.6, 0)
 	await toast("⏩ Különleges mezők", "Hátszél és szembeszél, kék és piros kockamező, UFO, rakéta, felzárkózó és „1 a többiek ellen”.", 3.4)
 	await toast("🎮 Kezdjük egy minijátékkal!", "", 1.6)
 
@@ -128,7 +128,7 @@ func turn(p) -> void:
 	h3.bridge_target = 1.0 if p.hw_cp >= 1 else 0.0
 	h3.gate_target = 1.0 if p.hw_cp >= 2 else 0.0
 	h3.gate_light = "green" if p.hw_cp >= 2 else ""
-	h3.cam_follow(ground(p).pos, "near", 2.5)
+	h3.cam_follow(ground(p).pos, "near", 2.5, float(p.node))
 	Audio.play("select")
 	for q in G.players:
 		if q != p:
@@ -149,12 +149,12 @@ func turn(p) -> void:
 
 
 ## Dobás: n kocka (kind: "std" = hatoldalú, "light" = piros/zöld lámpakocka). Igaz allow_match esetén
-## egyforma kockáknál +5 kocka. Visszaad: {total, vals, matched, grade}.
+## egyforma kockáknál +HL.MATCH_BONUS kocka. Visszaad: {total, vals, matched, grade}.
 func roll_dice(p, n: int, kind: String, allow_match: bool, hint: String, judge := true) -> Dictionary:
 	var g := ground(p)
 	dice = {"p": p, "origin": g.pos, "vals": [], "kind": kind, "t0s": [], "gold": false, "bonus_from": 99}
 	total_fx = null
-	h3.cam_follow(g.pos, "close" if n <= 3 else "near", 3.0)
+	h3.cam_follow(g.pos, "close" if n <= 3 else "near", 3.0, g.s)
 	var label := "🎲 DOBJ!" if kind == "std" else "🚦 DOBJ!"
 	await Net.ask(p.pid, {"mode": "tap", "label": label, "hint": hint, "botAuto": true}, ["tap"], 25)
 	var vals: Array = []
@@ -274,7 +274,7 @@ func back(p, n: int) -> void:
 # ------------------------------------------------------------------ ellenőrzőpontok
 func bridge(p) -> bool:
 	h3.bridge_target = 0.0
-	h3.cam_at(HL.pos(HL.CP_BRIDGE) + Vector3(0, 1.2, -1.0), Vector3(5.0, 4.0, 7.5), 2.5)
+	h3.cam_at(HL.pos(HL.CP_BRIDGE) + HL.rot(HL.CP_BRIDGE, Vector3(0, 1.2, -1.0)), Vector3(5.0, 4.0, 7.5), 2.5, HL.heading(HL.CP_BRIDGE))
 	await toast("🌉 Felvonóhíd", "%s egy kockával dob: páratlan kell (1, 3 vagy 5)!" % p.name, 2.0, p)
 	var r := await roll_dice(p, 1, "std", false, "Páratlan kell: 1, 3 vagy 5!", false)
 	var v: int = r.total
@@ -299,7 +299,7 @@ func bridge(p) -> bool:
 func lights(p) -> bool:
 	h3.gate_target = 0.0
 	h3.gate_light = "blink"
-	h3.cam_at(HL.pos(HL.CP_LIGHTS) + Vector3(0, 1.6, -1.0), Vector3(5.0, 4.2, 8.0), 2.5)
+	h3.cam_at(HL.pos(HL.CP_LIGHTS) + HL.rot(HL.CP_LIGHTS, Vector3(0, 1.6, -1.0)), Vector3(5.0, 4.2, 8.0), 2.5, HL.heading(HL.CP_LIGHTS))
 	await toast("🚦 Jelzőlámpás kapu", "%s %d lámpakockával dob: legalább egy legyen ZÖLD!" % [p.name, HL.LIGHT_DICE], 2.0, p)
 	var r := await roll_dice(p, HL.LIGHT_DICE, "light", false, "Legalább egy zöld kell!", false)
 	var greens: int = r.total
@@ -328,7 +328,7 @@ func lights(p) -> bool:
 
 func final_gate(p) -> void:
 	var need: int = HL.FINAL_NEED[mini(p.hw_final, HL.FINAL_NEED.size() - 1)]
-	h3.cam_at(HL.pos(HL.GOAL) + Vector3(0, 2.0, -1.0), Vector3(5.5, 4.0, 9.0), 2.5)
+	h3.cam_at(HL.pos(HL.GOAL) + HL.rot(HL.GOAL, Vector3(0, 2.0, -1.0)), Vector3(5.5, 4.0, 9.0), 2.5, HL.heading(HL.GOAL))
 	await toast("🏁 CÉLKAPU!", "%s %d kockával dob: legalább %d kell!" % [p.name, HL.FINAL_DICE, need], 2.4, p)
 	var r := await roll_dice(p, HL.FINAL_DICE, "std", false, "Legalább %d kell!" % need, false)
 	var total: int = r.total
@@ -345,6 +345,9 @@ func final_gate(p) -> void:
 
 
 # ------------------------------------------------------------------ különleges mezők
+## Egy lépésre legfeljebb EGY mezőhatás: a land() csak a rendes dobás utáni lépés végén fut (turn),
+## a hatások mozgatása (move/back/transport) soha nem hív újra land()-et. Így a sok szomszédos
+## különleges mező (pl. hatos +10-es csoport) sem okozhat végtelen láncot.
 func land(p) -> void:
 	var sp := HL.special(p.node)
 	if sp.is_empty():
@@ -392,7 +395,11 @@ func land(p) -> void:
 				await toast("🛸 UFO!", "Elrabolja %s-t, és %s mellé viszi" % [p.name, q.name], 1.8, p)
 				await transport(p, "ufo", q.node)
 		"ROCKET":
-			var dest: int = maxi(p.node, HL.ROCKET_TO)
+			# soha nem visz hátra, és le nem győzött ellenőrzőponton sem repül át
+			var dest: int = mini(maxi(p.node, HL.ROCKET_TO), HL.next_cp(p.hw_cp))
+			if dest <= p.node:
+				await toast("🚀 Rakéta", "%s már túl van a rakéta célján – most nem száll fel." % p.name, 1.6, p)
+				return
 			await toast("🚀 Rakéta!", "%s a %d. mezőig repül!" % [p.name, dest], 1.6, p)
 			await transport(p, "rocket", dest)
 		"DUEL":
@@ -465,7 +472,7 @@ func _duel_bonus() -> void:
 		if p == null:
 			continue
 		current = p
-		h3.cam_follow(ground(p).pos, "near", 2.5)
+		h3.cam_follow(ground(p).pos, "near", 2.5, float(p.node))
 		await toast("⚔️ %s: +%d bónuszkocka" % [p.name, int(e.n)], "", 1.4, p)
 		var r := await roll_dice(p, int(e.n), "std", true, "Bónusz: %d kocka" % int(e.n))
 		await move(p, r.total)
@@ -483,7 +490,11 @@ func transport(p, kind: String, dest: int) -> void:
 	var a: Vector3 = ground(p).pos
 	var b := HL.pos(dest, p.hw_lane)
 	carry = {"pid": p.pid, "kind": kind, "a": a, "b": b, "t0": t}
-	h3.cam_at((a + b) / 2.0 + Vector3(0, 3.0, 0), Vector3(9.0, 9.0, 16.0) + Vector3(0, absf(a.z - b.z) * 0.25, absf(a.z - b.z) * 0.35), 1.8)
+	# a repülés irányából nézve, oldalról-hátulról; minél messzebbre visz, annál hátrébb
+	var fly := Vector3(b.x - a.x, 0, b.z - a.z)
+	var yaw := HL.heading(float(p.node)) if fly.length() < 0.5 else atan2(fly.x, -fly.z)
+	var dist := a.distance_to(b)
+	h3.cam_at((a + b) / 2.0 + Vector3(0, 3.0, 0), Vector3(9.0, 9.0 + dist * 0.25, 16.0 + dist * 0.35), 1.8, yaw)
 	if kind == "ufo":
 		Audio.play("whoosh", 0.6)
 		after(1.0, func(): Audio.play("sparkle", 0.7))
@@ -501,7 +512,7 @@ func transport(p, kind: String, dest: int) -> void:
 	p.node = dest
 	h3.shake = 0.6
 	Net.push_status(p.pid)
-	h3.cam_follow(ground(p).pos, "near", 3.0)
+	h3.cam_follow(ground(p).pos, "near", 3.0, float(p.node))
 	await sleep(0.4)
 	if p.node == HL.next_cp(p.hw_cp):
 		await arrive_cp(p)
@@ -512,7 +523,7 @@ func _win(p) -> void:
 	print_verbose("[hw] győztes: %s, %d. kör" % [p.name, G.round])
 	current = p
 	h3.final_target = 1.0
-	h3.cam_at(HL.pos(HL.GOAL) + Vector3(0, 2.0, -2.0), Vector3(4.5, 3.6, 9.0), 2.0)
+	h3.cam_at(HL.pos(HL.GOAL) + HL.rot(HL.GOAL, Vector3(0, 2.0, -2.0)), Vector3(4.5, 3.6, 9.0), 2.0, HL.heading(HL.GOAL))
 	Audio.play("crown")
 	Audio.jingle("victory")
 	for q in G.players:
@@ -547,13 +558,14 @@ func ground(p) -> Dictionary:
 	if carry != null and carry.pid == p.pid:
 		var tt: float = t - float(carry.t0)
 		var f: Dictionary = Highway3D.ufo_frame(carry.a, carry.b, tt) if carry.kind == "ufo" else Highway3D.rocket_frame(carry.a, carry.b, tt)
-		return {"pos": f.pawn, "h": 0.0, "carried": true}
+		return {"pos": f.pawn, "h": 0.0, "carried": true, "s": NAN}
 	if runs.has(p.pid):
 		var r: Dictionary = runs[p.pid]
 		var k: float = clampf((t - float(r.t0)) / float(r.dur), 0.0, 1.0)
 		var e := D.ease_in_out(k) if float(r.dur) < 1.0 else _run_ease(k)
-		return {"pos": HL.pos(lerpf(r.from, r.to, e), p.hw_lane), "h": 0.0}
-	return {"pos": HL.pos(p.node, p.hw_lane), "h": 0.0}
+		var s := lerpf(r.from, r.to, e)
+		return {"pos": HL.pos(s, p.hw_lane), "h": 0.0, "s": s}
+	return {"pos": HL.pos(p.node, p.hw_lane), "h": 0.0, "s": float(p.node)}
 
 
 ## hosszú futásnál egyenletes tempó, csak az elején-végén gyorsul/lassul
@@ -588,7 +600,8 @@ func _cam_all() -> void:
 func update(dt: float) -> void:
 	if current and runs.has(current.pid):
 		var r: Dictionary = runs[current.pid]
-		h3.cam_follow(ground(current).pos, "near" if absf(float(r.to) - float(r.from)) < 25 else "mid", 4.0)
+		var g := ground(current)
+		h3.cam_follow(g.pos, "near" if absf(float(r.to) - float(r.from)) < 25 else "mid", 4.0, g.s)
 		step_t -= dt
 		if step_t <= 0.0:
 			step_t = 0.17

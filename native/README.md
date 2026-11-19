@@ -49,6 +49,7 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 
 **⛰️ Hegymászás** – egyetlen út csavarodik körbe-körbe egy hegyen, 80 mező a csúcsig. Aki először felér, az nyer; nincs körszám, érme vagy korona.
 - Minden kör egy minijátékkal kezdődik, és a helyezés osztja ki a kockákat a következő dobáshoz: **1. hely** két szabályos kocka (1–6) · **2. hely** egy szabályos és egy 1–4-es · **3. hely** egy szabályos és egy 1–2-es · **utolsó hely** egyetlen szabályos kocka. (Az „utolsó csak egy kockát kap” szabály 4 vagy több játékosnál él; 5–8 játékosnál a 4. és az utolsó közöttiek a 3. hely kockáit kapják. Holtversenyben mindenki a jobb helyezés kockáit kapja.)
+- 🎲 **Egyforma kockák:** ha legalább két kockával dobsz, és mind ugyanazt mutatja, még egy szabályos kockával dobhatsz.
 - A dobás sorrendje is a minijáték helyezése: a győztes lép először.
 - Ebben a módban nincsenek saját figurakockák, és a minijátékok mindig egyéniek (nincs csapat).
 - 🟥 **Büntetőmezők:** vissza 2–6 mezőt (lent medve, középen kőomlás, fent lavina – a hegy felfelé egyre keményebb).
@@ -57,9 +58,12 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 - A piros mezőkön tényleg megkerget a medve (feljebb kőomlás, majd lavina sodor vissza), a zöldeken a hátszél tol előre.
 - A különleges mezők és az akadályok pontos helye játékonként kicsit más.
 
-**🛣️ Óceánsztráda** – egy hosszú, egyenes sztráda az óceán fölött, 351 mező a célkapuig, 1–8 játékos. Nincs körszám: aki elsőként átjut a célkapun, az nyer.
+**🛣️ Óceánsztráda** – egy hosszú, kanyargós sztráda pilléreken az óceán fölött, 351 mező a célkapuig, 1–8 játékos. Nincs körszám: aki elsőként átjut a célkapun, az nyer.
+- Az út balra-jobbra kígyózik: S-kanyarok, két széles U-forduló, köztük egyenesek; a kamera a kanyarokkal együtt fordul, és előre néz. A vonalvezetést a `world/highway_layout.gd` `CURVE_KEYS` listája adja (mező + irány); a híd, a lámpás kapu és a cél mindig egyenes szakaszra esik.
+- A mezők kb. fele (181) különleges, a `SPECIAL_RUNS` listában állítható: hat egymást követő +10-es és hat −10-es mezőből álló csoportok (6–6 db, a csoport mentén a korlát is zölden/pirosan világít), sok ±20, kék és piros kockamező, 16 felzárkózó, 14 UFO, 5 rakéta. A pálya vége felé egyre sűrűbb és kaotikusabb.
+- Egy lépésre legfeljebb egy mezőhatás jut: ha a hátszél, a kockamező vagy az UFO újabb különleges mezőre visz, az már nem lép működésbe (nincs végtelen lánc).
 - Minden kör minijátékkal kezdődik; a helyezés adja a sorrendet és azt, hány hatoldalú kockával dobsz (holtversenyt kockadobás dönt el). 4 főnél 10 / 7 / 4 / 2 kocka, 8 főnél 10 / 9 / 8 / 7 / 6 / 5 / 4 / 2; a többi létszám táblája a `world/highway_layout.gd`-ben állítható.
-- A dobott összeggel a figura végigfut a sztrádán. Ha minden kocka ugyanazt mutatja: +5 bónuszkocka (aranyszínű összeg). A dobást a játék értékeli is (jó: arany szám, ökölrázás, ujjongó nézők; gyenge: billegő szám, csípőre tett kéz).
+- A dobott összeggel a figura végigfut a sztrádán. Ha minden kocka ugyanazt mutatja (bármennyi kockával dobsz): +5 bónuszkocka (aranyszínű összeg). A dobást a játék értékeli is (jó: arany szám, ökölrázás, ujjongó nézők; gyenge: billegő szám, csípőre tett kéz).
 - Különleges mezők: ⏩ hátszél (+10/+20), ⏪ szembeszél (−10/−20), kék kockamező (5 vagy 10 kocka előre, itt is jár az egyforma-bónusz), piros kockamező (5 vagy 10 kocka vissza), 🆙 felzárkózó (csak a sereghajtónak: +10/+20/+30 vagy UFO a vezetőhöz), 🛸 UFO (elvisz egy véletlen másik játékos mellé), 🚀 rakéta (a 190. mezőig), ⚔️ 1 a többiek ellen (a kör végén csapatos párbaj-minijáték: ha az egyedül játszó nyer, 5 bónuszkocka, ha a többiek, fejenként 2; egy játékosnál helyette egyszemélyes kihívás).
 - 🌉 **100: felvonóhíd** – egy kockával páratlan kell. 🚦 **200: jelzőlámpás kapu** – 5 lámpakockából legalább egy zöld kell; ezután minden kör előtt az utolsó helyezett választ minijátékot három közül. Ha nem sikerül: egy mezőt vissza, és a következő körben újra.
 - 🏁 **351: célkapu** – 10 kockával legalább 40 kell (bukás után már 35 is elég); ha nem sikerül, 15 mezőt vissza.
@@ -71,6 +75,7 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 
 **A műfaj klasszikus elemei, saját kivitelben:**
 - 🎲 **Saját kocka minden figurának.** Dobás előtt választhatsz a sima 1–10-es kocka és a figurád saját, 6 lapos kockája között. A Pingvin mindig 4–6-ot dob, a Szellem vagy semmit, vagy 12-t, a Malac kicsiket lép, de érmét is kap, és így tovább.
+- ✨ **Egyforma kockák:** ha több kockával dobsz (dupla/tripla kocka), és mind ugyanazt mutatja, még egy sima kockával dobhatsz.
 - 🙋 **Kockaütés:** a figurád felugrik, és megüti a feje fölött pörgő 3D kockát.
 - 🏁 **Kezdő sorrend-dobás:** mindenki egyszerre dob, és a legnagyobb szám kezd.
 - 🤝 **Barátok (szövetségesek):** a rózsaszín 🤝 mezőn egy szabad figura csatlakozik hozzád, és libasorban követ. Minden barát minden dobásodhoz +1–2 lépést ad (legfeljebb 3 barátod lehet).

@@ -250,6 +250,16 @@ func turn(p) -> void:
 		if dv[1] != 0:
 			give(p, dv[1])
 			await sleep(0.7)
+	# egyforma kockák (legalább kettő): még egy sima kockával dobhat
+	if n_dice >= 2 and rolls.all(func(x): return x == rolls[0]):
+		Audio.play("fanfare")
+		Audio.play("sparkle")
+		Main.I.confetti(40)
+		b3.emote(p.pid, "happy")
+		await toast("✨ EGYFORMA KOCKÁK!", "%s még egy kockával dobhat!" % p.name, 1.6, p)
+		var bv: Array = await roll_die(p, 0, 1, false)
+		rolls.append(bv[0])
+		total += bv[0]
 	# szövetségesek: mindegyik +1 vagy +2 lépést dob hozzá
 	for i in p.allies.size():
 		var bonus := randi_range(1, 2)
