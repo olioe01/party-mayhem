@@ -17,6 +17,7 @@ var dice = null              # {p, origin, vals, kind, t0s, gold, bonus_from}
 var total_fx = null          # {p, total, t0, grade, gold, label}
 var done := false
 var step_t := 0.0
+var walk = null              # {pid, left, dir}: a futó figura lépésszámlálója (left = a mostani futás elején hátralévő lépés)
 
 
 func _init(is_intro := false) -> void:
@@ -113,9 +114,9 @@ func _intro() -> void:
 	await toast("🎲 A kockákat a minijáték osztja", "Minden kör minijátékkal kezdődik. Kockák: " + " · ".join(parts), 4.0)
 	await toast("✨ Egyforma kockák = +%d kocka" % HL.MATCH_BONUS, "Ha minden kockád ugyanazt mutatja, még %d kockával dobsz!" % HL.MATCH_BONUS, 3.2)
 	h3.cam_follow(HL.pos(HL.CP_BRIDGE), "mid", 1.4, HL.CP_BRIDGE)
-	await toast("🌉 100: Felvonóhíd", "Egy kockával páratlan kell (1, 3, 5) – ha nem sikerül, egyet visszalépsz.", 3.4)
+	await toast("🌉 100: Felvonóhíd", "Egy kockával páratlan kell (1, 3, 5) – ha nem sikerül, egyet visszalépsz. Ha valaki egyszer leengedi, mindenkinek nyitva marad.", 3.8)
 	h3.cam_follow(HL.pos(HL.CP_LIGHTS), "mid", 1.4, HL.CP_LIGHTS)
-	await toast("🚦 200: Jelzőlámpás kapu", "%d lámpakockából legalább egy legyen zöld! Utána az utolsó helyezett választ minijátékot." % HL.LIGHT_DICE, 3.6)
+	await toast("🚦 200: Jelzőlámpás kapu", "%d lámpakockából legalább egy legyen zöld! Ha valaki kinyitja, mindenkinek nyitva marad, és onnantól az utolsó helyezett választ minijátékot." % HL.LIGHT_DICE, 4.0)
 	h3.cam_follow(HL.pos(HL.GOAL), "mid", 1.4, HL.GOAL)
 	await toast("🏁 %d: Célkapu" % HL.GOAL, "%d kockával legalább %d kell (ha elsőre nem megy, utána %d). Ha nem sikerül: %d mezőt vissza." % [HL.FINAL_DICE, HL.FINAL_NEED[0], HL.FINAL_NEED[1], HL.FINAL_FAIL_BACK], 4.0)
 	h3.cam_follow(HL.pos(0), "mid", 1.6, 0)
@@ -125,9 +126,9 @@ func _intro() -> void:
 
 func turn(p) -> void:
 	current = p
-	h3.bridge_target = 1.0 if p.hw_cp >= 1 else 0.0
-	h3.gate_target = 1.0 if p.hw_cp >= 2 else 0.0
-	h3.gate_light = "green" if p.hw_cp >= 2 else ""
+	h3.bridge_target = 1.0 if G.hw_open >= 1 else 0.0
+	h3.gate_target = 1.0 if G.hw_open >= 2 else 0.0
+	h3.gate_light = "green" if G.hw_open >= 2 else ""
 	h3.cam_follow(ground(p).pos, "near", 2.5, float(p.node))
 	Audio.play("select")
 	for q in G.players:
@@ -228,20 +229,27 @@ func roll_dice(p, n: int, kind: String, allow_match: bool, hint: String, judge :
 func move(p, steps: int) -> void:
 	var left := steps
 	while left > 0 and G.mtn_winner == null:
-		var cp := HL.next_cp(p.hw_cp)
+		var cp := HL.next_cp(cp_done(p))
 		var target: int = mini(p.node + left, cp)
 		if target > p.node:
+			walk = {"pid": p.pid, "left": left, "dir": 1}
 			left -= target - p.node
 			await run(p, target)
+			walk = null
 		if p.node == cp:
 			if not await arrive_cp(p):
 				return
 	total_fx = null
 
 
+## Hány ellenőrzőpont van már nyitva előtte: a sajátjai, vagy amit bárki más már kinyitott.
+func cp_done(p) -> int:
+	return maxi(p.hw_cp, G.hw_open)
+
+
 ## Ellenőrzőpontra érkezett (vagy UFO/rakéta oda tette): próbálkozás. Igaz, ha továbbmehet.
 func arrive_cp(p) -> bool:
-	var cp := HL.next_cp(p.hw_cp)
+	var cp := HL.next_cp(cp_done(p))
 	if p.node != cp:
 		return true
 	total_fx = null
@@ -268,7 +276,10 @@ func run(p, to: int) -> void:
 
 
 func back(p, n: int) -> void:
-	await run(p, maxi(0, p.node - n))
+	var to := maxi(0, p.node - n)
+	walk = {"pid": p.pid, "left": p.node - to, "dir": -1}
+	await run(p, to)
+	walk = null
 
 
 # ------------------------------------------------------------------ ellenőrzőpontok
@@ -281,12 +292,13 @@ func bridge(p) -> bool:
 	print_verbose("[hw] híd: %s -> %d" % [p.name, v])
 	if v % 2 == 1:
 		p.hw_cp = 1
+		G.hw_open = maxi(G.hw_open, 1)
 		h3.bridge_target = 1.0
 		Audio.play("clank")
 		Audio.play("fanfare")
 		h3.pose(p.pid, "cheer", 1.8)
 		h3.crowd(float(p.node), true)
-		await toast("🌉 Leereszkedett a híd!", "%d – páratlan! %s mehet tovább." % [v, p.name], 2.0, p)
+		await toast("🌉 Leereszkedett a híd!", "%d – páratlan! %s mehet tovább, és a híd mostantól mindenkinek nyitva marad." % [v, p.name], 2.4, p)
 		return true
 	Audio.play("fail")
 	h3.pose(p.pid, "hips", 1.8)
@@ -306,13 +318,14 @@ func lights(p) -> bool:
 	print_verbose("[hw] lámpa: %s -> %d zöld" % [p.name, greens])
 	if greens > 0:
 		p.hw_cp = 2
+		G.hw_open = maxi(G.hw_open, 2)
 		h3.gate_light = "green"
 		h3.gate_target = 1.0
 		Audio.play("bell")
 		Audio.play("fanfare")
 		h3.pose(p.pid, "cheer", 1.8)
 		h3.crowd(float(p.node), true)
-		await toast("🚦 ZÖLD! Nyílik a kapu!", "%d zöld lámpa – %s mehet tovább." % [greens, p.name], 2.0, p)
+		await toast("🚦 ZÖLD! Nyílik a kapu!", "%d zöld lámpa – %s mehet tovább, és a kapu mostantól mindenkinek nyitva marad." % [greens, p.name], 2.4, p)
 		if not G.hw_choose:
 			G.hw_choose = true
 			await toast("🎮 Mostantól az utolsó választ", "Minden kör előtt a sereghajtó választ minijátékot három közül.", 2.6)
@@ -396,7 +409,7 @@ func land(p) -> void:
 				await transport(p, "ufo", q.node)
 		"ROCKET":
 			# soha nem visz hátra, és le nem győzött ellenőrzőponton sem repül át
-			var dest: int = mini(maxi(p.node, HL.ROCKET_TO), HL.next_cp(p.hw_cp))
+			var dest: int = mini(maxi(p.node, HL.ROCKET_TO), HL.next_cp(cp_done(p)))
 			if dest <= p.node:
 				await toast("🚀 Rakéta", "%s már túl van a rakéta célján – most nem száll fel." % p.name, 1.6, p)
 				return
@@ -485,7 +498,7 @@ func _duel_bonus() -> void:
 ## UFO / rakéta: elviszi a figurát a dest mezőre (nem lép át le nem győzött ellenőrzőponton).
 func transport(p, kind: String, dest: int) -> void:
 	dest = clampi(dest, 0, HL.GOAL)
-	var cp := HL.next_cp(p.hw_cp)
+	var cp := HL.next_cp(cp_done(p))
 	dest = mini(dest, cp)
 	var a: Vector3 = ground(p).pos
 	var b := HL.pos(dest, p.hw_lane)
@@ -514,7 +527,7 @@ func transport(p, kind: String, dest: int) -> void:
 	Net.push_status(p.pid)
 	h3.cam_follow(ground(p).pos, "near", 3.0, float(p.node))
 	await sleep(0.4)
-	if p.node == HL.next_cp(p.hw_cp):
+	if p.node == HL.next_cp(cp_done(p)):
 		await arrive_cp(p)
 
 
@@ -623,6 +636,8 @@ func _render(dt: float) -> void:
 func draw(c: CanvasItem) -> void:
 	if total_fx and total_fx.p:
 		_draw_total(c)
+	if walk != null and not (total_fx and total_fx.p and total_fx.p.pid == walk.pid):
+		_draw_walk(c)
 	_draw_hud(c)
 	_draw_progress(c)
 	if toast_obj:
@@ -637,6 +652,10 @@ func _draw_total(c: CanvasItem) -> void:
 	if q.x < -500:
 		return
 	var shown: int = int(round(float(o.total) * clampf(k / 0.5, 0.0, 1.0)))
+	# futás közben a dobott szám mezőről mezőre fogy: látszik, hol áll meg
+	var left := _walk_left(p.pid)
+	if left >= 0:
+		shown = left
 	var gold: bool = o.gold
 	var bad: bool = o.grade == "bad"
 	var s := D.ease_out_back(clampf(k * 3.0, 0.0, 1.0))
@@ -654,6 +673,35 @@ func _draw_total(c: CanvasItem) -> void:
 	if lab != "":
 		D.text(c, lab, 0, 70, {"size": 28, "color": Color("#ffe066") if gold else Color("#e5dbff"), "stroke": D.DARK, "sw": 6})
 	c.draw_set_transform(Vector2.ZERO)
+
+
+## Hány lépés van még hátra a pid figura mostani futásából (-1, ha nem fut).
+func _walk_left(pid: String) -> int:
+	if walk == null or walk.pid != pid or not runs.has(pid):
+		return -1
+	var r: Dictionary = runs[pid]
+	var k: float = clampf((t - float(r.t0)) / float(r.dur), 0.0, 1.0)
+	var e := D.ease_in_out(k) if float(r.dur) < 1.0 else _run_ease(k)
+	var done_steps := int(floor(absf(float(r.to) - float(r.from)) * e + 0.001))
+	return maxi(0, int(walk.left) - done_steps)
+
+
+## Lépésszámláló buborék a futó figura fölött (hátszél, felzárkózó, visszalépés: ahol nincs dobott szám).
+func _draw_walk(c: CanvasItem) -> void:
+	var p = G.by_pid(str(walk.pid))
+	var left := _walk_left(str(walk.pid))
+	if p == null or left < 0:
+		return
+	var q := pawn_xy(p)
+	if q.x < -500:
+		return
+	var back_run: bool = int(walk.dir) < 0
+	var y := clampf(q.y - 150.0, 90.0, 600.0)
+	var fill := Color("#c92a2a") if back_run else Color("#2b1055")
+	c.draw_circle(Vector2(q.x, y), 34, Color.WHITE)
+	c.draw_circle(Vector2(q.x, y), 29, fill)
+	D.text(c, ("−%d" if back_run else "%d") % left, q.x, y + 1, {"size": 34, "color": Color.WHITE, "stroke": D.DARK, "sw": 4})
+	D.text(c, "👣 vissza" if back_run else "👣 lépés", q.x, y + 50, {"size": 18, "color": Color("#ffe066"), "stroke": D.DARK, "sw": 5})
 
 
 func _draw_hud(c: CanvasItem) -> void:
@@ -692,6 +740,10 @@ func _draw_progress(c: CanvasItem) -> void:
 		var cx := lerpf(x0, x1, float(cp) / HL.GOAL)
 		c.draw_line(Vector2(cx, y - 14), Vector2(cx, y + 14), Color("#ffd43b"), 4, true)
 		D.emoji(c, {HL.CP_BRIDGE: "🌉", HL.CP_LIGHTS: "🚦", HL.GOAL: "🏁"}[cp], cx, y - 2, 18)
+		# végleg kinyitva (valaki már átjutott): zöld pipa
+		if (cp == HL.CP_BRIDGE and G.hw_open >= 1) or (cp == HL.CP_LIGHTS and G.hw_open >= 2):
+			c.draw_circle(Vector2(cx + 13, y + 11), 8, Color("#2fb344"))
+			D.text(c, "✓", cx + 13, y + 11, {"size": 13, "color": Color.WHITE})
 	var by := {}
 	for p in G.players:
 		var s: float = float(p.node)

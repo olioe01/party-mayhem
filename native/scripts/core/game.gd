@@ -218,6 +218,7 @@ func start_game() -> void:
 	G.hw_duel_now = false
 	G.hw_bonus = []
 	G.hw_choose = false
+	G.hw_open = 0
 	if G.is_highway():
 		G.hw_choose = test_start_node > HighwayLayout.CP_LIGHTS
 		G.mtn_order = G.players.duplicate()
@@ -227,6 +228,7 @@ func start_game() -> void:
 			p.node = clampi(test_start_node, 0, HighwayLayout.GOAL - 1)
 			p.hw_cp = (1 if p.node > HighwayLayout.CP_BRIDGE else 0) + (1 if p.node > HighwayLayout.CP_LIGHTS else 0)
 			p.hw_dice = 10
+			G.hw_open = p.hw_cp
 		if force_mg != "":
 			Main.I.set_scene(MgFlow.SelectScene.new(force_mg))
 			return

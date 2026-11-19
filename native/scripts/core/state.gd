@@ -55,6 +55,7 @@ var hw_duel := ""                # Óceánsztráda: aki „1 a többiek ellen”
 var hw_duel_now := false         # a mostani minijáték a párbaj
 var hw_bonus: Array = []         # [{pid, n}]: a párbaj után járó bónuszkockák
 var hw_choose := false           # a 200-as kapu után az utolsó helyezett választ minijátékot
+var hw_open := 0                 # ennyi ellenőrzőpont (100, 200) nyílt meg végleg: ha bárki átjut, mindenkinek nyitva
 var players: Array = []          # PlayerData
 var max_rounds := 10
 var round := 1
