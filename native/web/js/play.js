@@ -7,9 +7,21 @@ function connectHost() {
   let wasOpen = false;
   let retry = 0;
   const fire = (evt, data) => (handlers[evt] || []).forEach((f) => f(data));
-  const open = () => {
+  // Cloudflare-alagút alatt (https, port nélkül) a WebSocket egy másik alagúton van: a host megmondja, melyiken.
+  let wsUrl = null;
+  const resolveUrl = async () => {
+    if (location.protocol === 'https:' && !location.port) {
+      try {
+        const h = (await (await fetch('/ws-host', { cache: 'no-store' })).text()).trim();
+        if (/^[a-z0-9.-]+$/i.test(h)) return `wss://${h}/`;
+      } catch { /* marad a helyi cím */ }
+    }
     const port = Number(location.port || 80) + 1;
-    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:${port}/`);
+    return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:${port}/`;
+  };
+  const open = async () => {
+    if (!wsUrl) wsUrl = await resolveUrl();
+    ws = new WebSocket(wsUrl);
     ws.onopen = () => {
       retry = 0;
       wasOpen = true;
@@ -27,6 +39,7 @@ function connectHost() {
       if (wasOpen) fire('disconnect');
       wasOpen = false;
       retry = Math.min(retry + 1, 6);
+      if (retry >= 3) wsUrl = null; // többszöri hiba után kérdezzük le újra (pl. új alagút)
       setTimeout(open, 300 * retry);
     };
     ws.onerror = () => { try { ws.close(); } catch { /* */ } };
@@ -192,6 +205,24 @@ function connectHost() {
         screen.querySelectorAll('.choice').forEach((x) => { x.disabled = true; });
         buzz(30);
         send({ t: 'choice', v: Number(b.dataset.i) });
+      }));
+    },
+
+    // kerek számgombok (Rönklépcső): a visszaszámlálás végéig át lehet választani
+    steps(l) {
+      const col = /^#[0-9a-f]{3,8}$/i.test(l.color || '') ? l.color : '#ffd43b';
+      const opts = l.options || [];
+      let sel = l.sel ?? null;
+      const note = () => (sel ? `A választásod: ${sel} – a visszaszámlálás végéig átválthatsz.` : 'Még nem választottál (ha így marad, a legkisebbet kapod).');
+      screen.innerHTML = `<h2>${esc(l.title)}</h2>${l.text ? `<p>${esc(l.text)}</p>` : ''}
+        <div class="steps n${opts.length}" style="--pc:${col}">${opts.map((v) => `<button class="stepbtn${v === sel ? ' sel' : ''}" data-v="${Number(v)}">${Number(v)}</button>`).join('')}</div>
+        <p class="muted" id="stepnote">${esc(note())}</p>`;
+      screen.querySelectorAll('.stepbtn').forEach((b) => b.addEventListener('click', () => {
+        sel = Number(b.dataset.v);
+        screen.querySelectorAll('.stepbtn').forEach((x) => x.classList.toggle('sel', x === b));
+        document.getElementById('stepnote').textContent = note();
+        buzz(25);
+        send({ t: 'step', v: sel });
       }));
     },
 

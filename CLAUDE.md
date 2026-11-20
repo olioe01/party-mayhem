@@ -24,7 +24,7 @@ tools/build.sh                       # zene -> web.zip -> build/PartyMayhem.exe 
 godot --headless --path . --import   # új class_name-es szkript után egyszer kell
 ```
 
-Kapcsolók a `--` után (`core/game.gd` `apply_args`): `--bots=N --autostart --rounds=N --mode=mountain|highway --mg=<id> --mgtest[=N] --speed=N --small --shots=<mappa> --shot-every= --quit-at=<mp> --start-node=N --tiles=F|P|X --portraits=id,id|all --join=<cím|kód> --room[=KÓD] --relay=<ws-cím> --online-ui --sync-log`.
+Kapcsolók a `--` után (`core/game.gd` `apply_args`): `--bots=N --autostart --rounds=N --mode=mountain|highway --mg=<id> --mgtest[=N] --speed=N --small --shots=<mappa> --shot-every= --quit-at=<mp> --start-node=N --tiles=F|P|X --portraits=id,id|all --join=<cím|kód> --room[=KÓD] --relay=<ws-cím> --online-ui --sync-log --cloud`.
 Ablakos futás (képernyőképhez) WSLg + llvmpipe alatt lassú: `--small --speed=3`, az első táblakörig 150–200 mp.
 Egyszerre csak egy godot példány fusson (különben a portok 3000/3001-ről 3010/3011-re lépnek), kivéve a szinkrontesztet.
 
@@ -35,7 +35,7 @@ Egyszerre csak egy godot példány fusson (különben a portok 3000/3001-ről 30
 - `scenes/` – `lobby_scene`, `board_scene` (koronavadászat), `mountain_scene` (hegymászás), `highway_scene` (Óceánsztráda, `G.is_race()` közös a hegymászással: `mtn_order`, `mtn_winner`), `mg_flow` (minijáték-keret + a minijátékok preload-listája), `final_scene`.
   Az `mg_flow` `IntroScene`-je az ismertető mellett próbakört futtat egy `SubViewport`-ban (`Minigame.preview`, `Net.practice`, `Main.fx_rect`); a `TestScene` a lobbi „Minijáték teszt” felülete (`G.mg_test`: nincs jutalom, a végén ide tér vissza).
 - `world/` – `board_layout` + `board3d` (szigetek), `mountain_layout` + `mountain3d` (hegy), `highway_layout` (az Óceánsztráda minden száma) + `highway3d` (sztráda), `chars3d` (figurák, `Chars3D.build(id)`).
-- `minigames/` – `minigame.gd` (`Minigame` ős) + 31 db `mg_<id>.gd` (+ `presents_world.gd`: az Ajándéktorony díszlete, járművei, dobozai; `mg_kit.gd`: a Kártyafogó/Tűzijáték-pumpa/Sínharc közös segédei – ezüst óra, helyezéscímke, kar-IK és arckifejezés – a Vakondvadász is használja; `mole_world.gd`: a Vakondvadász tere, lyukai, vakondjai, kalapácsa). Billentyűzetes irányítás opt-in: `keyboard_lr()` (A/D) vagy `keyboard_stick()` (WASD/nyilak + szóköz), mindkettő tesztbot híján az első játékos nevében, online vendéggépen senkiében (`main.gd` `_kb_target`).
+- `minigames/` – `minigame.gd` (`Minigame` ős) + 33 db `mg_<id>.gd` (+ `presents_world.gd`: az Ajándéktorony díszlete, járművei, dobozai; `mg_kit.gd`: a Kártyafogó/Tűzijáték-pumpa/Sínharc közös segédei – ezüst óra, helyezéscímke, kar-IK és arckifejezés – a Vakondvadász is használja; `mole_world.gd`: a Vakondvadász tere, lyukai, vakondjai, kalapácsa). Billentyűzetes irányítás opt-in: `keyboard_lr()` (A/D) vagy `keyboard_stick()` (WASD/nyilak + szóköz), mindkettő tesztbot híján az első játékos nevében, online vendéggépen senkiében (`main.gd` `_kb_target`).
 - `../relay/` – közvetítő szerver az online szobákhoz (Node + `ws`, a Renderen fut). Helyi próba: `PORT=8787 node relay/server.js`, hoszt `--relay=ws://127.0.0.1:8787 --room=TESTA`, vendég `--relay=ws://127.0.0.1:8787 --join=TESTA`.
 - `../web/` – a telefonos kontroller (`js/play.js`, `play.css`); a build `web.zip`-be csomagolja.
 
@@ -46,7 +46,7 @@ Egyszerre csak egy godot példány fusson (különben a portok 3000/3001-ről 30
 ## Kötelező szabályok új kódnál
 
 - **A minijátékok nem töltik fel magukat gépi ellenféllel (állandó szabály).** Minden minijátékban pontosan annyi résztvevő van, ahány játékos a játékban van (1–8): ha ketten játszanak, ketten vannak a minijátékban is. Tilos kitöltő gépi ellenfelet vagy üres helyet mutató panelt létrehozni; a felület a `players` listából épül, és minden minijáték 8 főig játszható. A lobbiban viszont a játék elején **lehet** botot hozzáadni („+ Bot” gomb, `B`): ő rendes játékos lesz. A lecsatlakozott játékos helyett játszó automatika (`Net.away`) is megmaradhat.
-- Az eredményképernyő (`MgFlow.ResultScene`) közös: ha változik, minden minijáték után ugyanúgy változzon. Minijáték-szintű kapcsolók a `meta()`-ban: `"keep_ties": true` (holtverseny marad, nincs kockadobás), `"own_end": true` (a minijáték saját befejező feliratot rajzol, a „VÉGE!” elmarad).
+- Az eredményképernyő (`MgFlow.ResultScene`) közös: ha változik, minden minijáték után ugyanúgy változzon. Minijáték-szintű kapcsolók a `meta()`-ban: `"keep_ties": true` (holtverseny marad, nincs kockadobás), `"own_end": true` (a minijáték saját befejező feliratot rajzol, a „VÉGE!” elmarad). Saját zene: `"music": "<név>"` (a `tools/make_music.mjs` `SONGS` listájából, pl. `spooky`). Létszámkorlát: `"min_players"` / `"max_players"` (pl. Rönklépcső: 3–8); a sorsolás, az Óceánsztráda-választó és a teszt-felület is `MgFlow.fits()`-szel szűr – kevés játékosnál a játék kimarad, nem töltjük fel bottal.
 
 Az online mód determinisztikus lockstep; ezek megszegése szétcsúsztatja a gépeket:
 

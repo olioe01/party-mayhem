@@ -157,6 +157,8 @@ func key(e: InputEventKey) -> void:
 		open_test()
 	elif e.keycode == KEY_B:
 		add_bot()
+	elif e.keycode == KEY_C:
+		toggle_cloud()
 	elif e.keycode == KEY_J:
 		var mi := 0
 		for i in G.MODES.size():
@@ -168,6 +170,12 @@ func key(e: InputEventKey) -> void:
 		var j := clampi((1 if i < 0 else i) + (1 if e.keycode == KEY_RIGHT else -1), 0, ROUND_OPTIONS.size() - 1)
 		G.max_rounds = ROUND_OPTIONS[j]
 		refresh()
+
+
+## Cloudflare-alagút: ha a telefonok nem érik el a gépet a helyi hálózaton, nyilvános címet nyit.
+func toggle_cloud() -> void:
+	Net.tunnel.toggle(Net.http_port, Net.ws_port)
+	Audio.play("select")
 
 
 ## A lobbiban, a játék elején lehet botot adni: ő teljes jogú játékos lesz.
@@ -196,6 +204,11 @@ func slot_pos(i: int) -> Vector2:
 
 
 func update(dt: float) -> void:
+	# a csatlakozási cím megváltozhat (Cloudflare-alagút be/ki): új QR-kód
+	var u := Net.join_url()
+	if u != url:
+		url = u
+		qr_tex = _make_qr(url)
 	for p in G.players:
 		if not seen.has(p.pid):
 			seen[p.pid] = t
@@ -234,11 +247,20 @@ func draw(c: CanvasItem) -> void:
 	if qr_tex:
 		c.draw_texture_rect(qr_tex, Rect2(105, 232, 270, 270), false)
 	D.text(c, "Olvasd be, vagy írd be:", 240, 540, {"size": 19, "color": Color("#cfc6f5")})
-	D.text(c, url.replace("http://", ""), 240, 574, {"size": 28, "color": Color("#ffd43b"), "maxw": 350})
+	D.text(c, url.replace("http://", "").replace("https://", ""), 240, 574, {"size": 28, "color": Color("#ffd43b"), "maxw": 350})
+	var tn = Net.tunnel
 	if Net.server_error != "":
 		D.text(c, Net.server_error, 240, 607, {"size": 14, "color": Color("#ff8787"), "maxw": 360})
+	elif tn.state == "on":
+		D.text(c, "🌐 Interneten át: bármilyen hálózatról (mobilnetről is)!", 240, 607, {"size": 15, "color": Color("#69db7c"), "maxw": 360})
+	elif tn.state == "error":
+		D.text(c, tn.message, 240, 607, {"size": 14, "color": Color("#ff8787"), "maxw": 360})
+	elif tn.is_busy():
+		D.text(c, tn.message, 240, 607, {"size": 15, "color": Color("#ffe8a3"), "maxw": 360})
 	else:
 		D.text(c, "Ugyanazon a Wi-Fi hálózaton legyél!", 240, 607, {"size": 16, "color": Color("#a99fd6"), "bold": false})
+	var cl := "🏠 Vissza a helyi hálózatra" if tn.state == "on" else ("⏳ Megszakítás" if tn.is_busy() else "🌐 Nem megy? Csatlakozás interneten át")
+	button(c, 70, 636, 340, 30, cl, toggle_cloud, {"color": Color("#868e96") if tn.state == "on" or tn.is_busy() else Color("#f59f00"), "size": 15})
 
 	D.text(c, "Játékosok (%d/%d)" % [G.players.size(), G.MAX_PLAYERS], 470, 152, {"size": 26, "align": "left"})
 	button(c, 1030, 137, 212, 26, "🧪 Minijáték teszt", open_test, {"color": Color("#b197fc") if not G.players.is_empty() else Color("#555555"), "size": 15})
@@ -292,4 +314,4 @@ func draw(c: CanvasItem) -> void:
 	D.text(c, "A ⭐ VIP a telefonjáról is indíthat, ha mindenki kész. Itt: ENTER = indítás", 50, 680, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false, "maxw": 400})
 	button(c, 855, 645, 110, 46, "+ Bot", add_bot, {"color": Color("#4dabf7"), "size": 20})
 	button(c, 975, 645, 90, 46, "− Bot", remove_bot, {"color": Color("#868e96"), "size": 20})
-	D.text(c, "B = bot · J = játékmód · T = minijáték teszt · F = teljes képernyő · M = hang · P = FPS · O = online", 50, 700, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false})
+	D.text(c, "B = bot · C = Cloudflare · J = játékmód · T = minijáték teszt · F = teljes képernyő · M = hang · P = FPS · O = online", 50, 700, {"size": 14, "color": Color("#b0a6e0"), "align": "left", "bold": false})

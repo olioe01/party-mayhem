@@ -24,6 +24,7 @@ var http_port := 0
 var ws_port := 0
 var addresses: PackedStringArray = []
 var server_error := ""
+var tunnel = preload("res://scripts/core/tunnel.gd").new()   # Cloudflare-alagút (lobbi gomb)
 
 var _http := TCPServer.new()
 var _ws := TCPServer.new()
@@ -53,6 +54,7 @@ class Ask:
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(tunnel)
 	_open_web_bundle()
 	_start_servers()
 	addresses = _lan_addresses()
@@ -112,6 +114,8 @@ func _lan_addresses() -> PackedStringArray:
 
 
 func join_url() -> String:
+	if tunnel.state == "on" and tunnel.page_url != "":
+		return tunnel.page_url
 	var forced := OS.get_environment("PUBLIC_HOST")
 	var host := forced if forced != "" else (addresses[0] if addresses.size() else "localhost")
 	return "http://%s:%d" % [host, http_port] if http_port != 80 else "http://%s" % host
@@ -188,6 +192,10 @@ func _answer_http(peer: StreamPeerTCP, req: String) -> void:
 	if path == "/" or path == "/index.html" or path == "/play":
 		path = "/index.html"
 	path = path.trim_prefix("/")
+	if path == "ws-host":      # Cloudflare-alagút alatt a telefon innen tudja meg a WebSocket címét
+		var h: String = tunnel.ws_host if tunnel.state == "on" else ""
+		_send_http(peer, 200, "text/plain; charset=utf-8", h.to_utf8_buffer(), first[0] == "HEAD")
+		return
 	if path.contains("..") or path.begins_with("."):
 		_send_http(peer, 404, "text/plain", "Not found".to_utf8_buffer(), false)
 		return

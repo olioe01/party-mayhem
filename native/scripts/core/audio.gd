@@ -263,6 +263,24 @@ func _build_sfx() -> void:
 	_store("firework", b, 4)
 	b = PackedFloat32Array(); _tone(b, 170, 0.11, "square", 0.17, -100); _noise_burst(b, 0.12, 0.32, 0, 2800); _store("cannon", b, 6)
 	b = PackedFloat32Array(); _tone(b, 1480, 0.14, "triangle", 0.12, -260); _tone(b, 2210, 0.1, "sine", 0.06); _noise_burst(b, 0.03, 0.12, 0, 6000); _store("clank", b, 6)
+	# Zombifogó: nyögés, bagoly, zombivá változás, távoli mennydörgés
+	b = PackedFloat32Array(); _tone(b, 110, 0.7, "saw", 0.09, -35); _tone(b, 138, 0.7, "triangle", 0.12, -45, 0.05); _swell(b, 0.7, 0.08, 500); _store("groan", b, 4)
+	b = PackedFloat32Array()
+	for at in [0.0, 0.32, 0.52]:
+		_tone(b, 430, 0.18 if at < 0.5 else 0.34, "sine", 0.16, -40, at, 0.03)
+	_store("owl", b, 2)
+	b = PackedFloat32Array(); _tone(b, 880, 0.22, "square", 0.08, -620); _tone(b, 300, 0.45, "saw", 0.08, -180, 0.18)
+	for i in 5: _tone(b, 200 + (i % 2) * 60, 0.06, "triangle", 0.14, 0, 0.3 + i * 0.07)
+	_noise_burst(b, 0.35, 0.22, 0.02, 1800); _store("zombify", b, 4)
+	b = PackedFloat32Array(); _noise_burst(b, 1.6, 0.5, 0, 420); _tone(b, 55, 1.2, "sine", 0.4, -20, 0.05); _store("thunder", b, 2)
+	# Gyöngyhalászat: gyöngy, medúza-áramütés, buborék
+	b = PackedFloat32Array()
+	for i in 4: _tone(b, [1175, 1568, 1976, 2637][i], 0.16 + i * 0.04, "sine", 0.16, 0, i * 0.045)
+	_tone(b, 784, 0.3, "triangle", 0.1, 0, 0.0); _store("pearl", b, 6)
+	b = PackedFloat32Array()
+	for i in 7: _tone(b, 1400 - i * 120, 0.04, "square", 0.08, 300, i * 0.035)
+	_noise_burst(b, 0.25, 0.25, 0, 5200); _tone(b, 160, 0.3, "saw", 0.08, -60, 0.05); _store("zap", b, 4)
+	b = PackedFloat32Array(); _tone(b, 380, 0.07, "sine", 0.16, 900); _store("bubble", b, 8)
 	var pads := [329.63, 261.63, 392.0, 523.25]
 	for i in 4:
 		b = PackedFloat32Array(); _tone(b, pads[i], 0.4, "triangle", 0.3); _store("pad%d" % i, b)

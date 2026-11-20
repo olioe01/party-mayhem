@@ -87,9 +87,9 @@ A lobbyban a gépen (a jobb felső gombokkal vagy a `J` billentyűvel) vagy a �
 - 🔵🔴 **Csapatos minijátékok:** 4 játékosnál az utolsó mező színe dönti el a csapatokat. Kék mező esetén a kék csapatba, piros mező esetén a piros csapatba kerülsz, az eseménymezők véletlenszerűen osztanak. Így 2 a 2 vagy 1 a 3 ellen is lehet játék.
 - 🏆 **Végén 3 bónusz korona** 7 lehetséges közül (minijáték-mester, vándor, krőzus, pechmadár, kalandor, vásárkirály, barátságos), majd 3D dobogó.
 
-**31 minijáték** (válogatás):
+**33 minijáték** (válogatás):
 
-Minden minijátékban pontosan annyian vesznek részt, ahány játékos a játékban van (1–8 fő, minden minijáték 8 főig játszható); a minijátékok soha nem töltik fel magukat gépi ellenféllel. A lobbiban a játék elején a „+ Bot” gombbal (vagy a `B` billentyűvel) lehet botot adni – ő rendes játékosként vesz részt. A közös eredményképernyőn bal oldalt a lista, jobb oldalt 3D-s talapzatokon a figurák: a győztes ugrál és a magasba emeli a karját, az utolsó lehajtott fejjel szomorkodik.
+Minden minijátékban pontosan annyian vesznek részt, ahány játékos a játékban van (1–8 fő, minden minijáték 8 főig játszható); a minijátékok soha nem töltik fel magukat gépi ellenféllel. Ha egy minijátékhoz kevesen vagytok (a Rönklépcsőhöz legalább 3 fő kell), az egyszerűen nem kerül sorra. A lobbiban a játék elején a „+ Bot” gombbal (vagy a `B` billentyűvel) lehet botot adni – ő rendes játékosként vesz részt. A közös eredményképernyőn bal oldalt a lista, jobb oldalt 3D-s talapzatokon a figurák: a győztes ugrál és a magasba emeli a karját, az utolsó lehajtott fejjel szomorkodik.
 
 | | Név | Irányítás | Megjelenés |
 |---|---|---|---|
@@ -112,6 +112,9 @@ Minden minijátékban pontosan annyian vesznek részt, ahány játékos a játé
 | 🚃 | Sínharc *(új, 8 főig)* | joystick – irány a kereszteződésben, hátrahúzva fordulás; TŰZ – lövés; csak a hátsó céltábla sebez, 3 életerő, 60 mp | 3D, várudvar |
 | 🌩️ | Viharpadló *(megújult)* | joystick (gépen WASD/nyilak) – a magasban lebegő platform bal fele PIROS, jobb fele KÉK; 5 mp alatt állj arra, amelyik szerinted megmarad; az egyik fele (fele-fele eséllyel) csapóajtóként lenyílik, aki rajta áll, lezuhan és ⚡ villámot kap; 3 kör, a legkevesebb villám nyer, holtversenyben azonos helyezés | 3D, óceán fölött, erősödő vihar |
 | 🔨 | Vakondvadász *(megújult, max. 8 fő)* | joystick + ÜTÉS (gépen WASD/nyilak + szóköz) – fuss a 3×3 lyukból kibújó vakondhoz és csapj le az óriási játékkalapáccsal: barna +1, arany +3; a kalapács a többieket is elkábítja; 30 mp, a végére egyre több vakond | 3D |
+| 🪵 | Rönklépcső *(új, csak 3–8 fő)* | kerek számgombok (gépen A/D, ←/→) – mindenki titokban választ, hány fokot lép; a 10 mp-es visszaszámlálás végéig átválthat, aki nem választ, a legkisebbet kapja; ha más is ugyanazt választotta, mind helyben maradnak; az nyer, aki elsőként felér a célkapuig. 3–4 fő: 1/3/5 lépés, 16 fok · 5–6 fő: 1/3/5/7, 18 fok · 7–8 fő: 1/2/3/5/6/7, 20 fok | 3D |
+| 🧟 | Zombifogó *(új)* | joystick (gépen WASD/nyilak) – éjszakai temető kovácsoltvas kerítéssel; akit megérint egy zombi, zombivá változik és onnantól ő is üldöz (végig irányítod); a sírkövek mögé nem lát és nem nyúl át a zombi; az utolsó ember nyer, a helyezés a túlélési idő (az időkorlát végén ember maradtak holtversenyben) | 3D |
+| 🦪 | Gyöngyhalászat *(új)* | joystick (gépen WASD/nyilak) – oldalnézetes víz alatti aréna, szabad úszás jobbra-balra és fel-le; a különböző magasságú párkányokon ülő óriáskagylók időnként kinyílnak: aki elsőként megérinti a gyöngyöt, +1 pont, a kagyló egy időre bezárul; a lassan lebegő medúza 1,5 mp-re megbénít (utána rövid védettség); 30 mp | 3D |
 | 🏗️ | Toronyépítő *(új)* | koppintás – ejtsd a lengő blokkot pontosan a toronyra | 3D |
 | 🎣 | Horgászverseny *(új)* | koppintás, amikor lemerül az úszó; kis hal 1, nagy hal 3, bakancs −1 | 3D |
 | 🔦 | Zseblámpás bújócska *(új, 1 a 3 ellen vagy sorsolt keresővel)* | joystick – a kereső fénykúpja elől a ládák mögé kell bújni | 3D, sötét |

@@ -283,6 +283,7 @@ const DRUMS = {
   tense: { k: 'x..x..x...x..x..', s: '....x.......x...', h: 'x.x.x.x.x.x.x.x.', t: '..............xx' },
   march: { k: 'x.......x.......', s: '....x..x....x.xx', h: 'x.x.x.x.x.x.x.x.' },
   anthem: { k: 'x.......x.......', s: '....x.......x...', h: '..x...x...x...x.', t: '............x.x.' },
+  creep: { k: 'x.....x.x.......', s: '....x.......x...', h: '..x...x...x...x.', t: '..............x.' },
 };
 
 function render(song) {
@@ -433,6 +434,15 @@ const SONGS = [
     chords: ['C', 'Ab', 'Bb', 'C', 'C', 'Ab', 'Bb', 'G'],
     mel: `C6 - G5 - E5 - G5 - | Ab5 - Eb5 - C5 - Eb5 - | Bb5 - F5 - D5 - F5 - | C6 - - - E6 - G6 - |
           C6 - G5 - E5 - G5 - | C6 - Ab5 - Eb5 - Ab5 - | D6 - Bb5 - F5 - D6 - | B5 - D6 - G6 - - -`,
+  },
+  {
+    // Zombifogó: játékos, kísérteties d-moll (saját dallam)
+    name: 'spooky', bpm: 116, swing: 0.18, lead: 'pluck', double: 'bell', leadVol: 0.24, bass: 'walk', comp: 'arp', drums: 'creep',
+    chords: ['Dm', 'Dm', 'Bb', 'A', 'Dm', 'Gm', 'A', 'A', 'Gm', 'Dm', 'Bb', 'A', 'Gm', 'A', 'Dm', 'Dm'],
+    mel: `D5 - F5 - A5 - G#5 A5 | F5 - D5 - . . A4 - | Bb4 - D5 - F5 - E5 F5 | E5 - C#5 - A4 - . . |
+          D5 F5 A5 - D6 - C#6 - | Bb5 - G5 - D5 - Bb4 - | C#5 - E5 - A5 - G5 - | E5 - - - . . A4 - |
+          G4 Bb4 D5 - G5 - F5 - | F5 - D5 - A4 - D5 - | Bb4 D5 F5 - Bb5 - A5 - | A5 - G5 - E5 - C#5 - |
+          D5 - G5 - Bb5 - A5 G5 | A5 - E5 - C#5 - E5 - | D5 - A4 - F4 - A4 - | D5 - - - . . . .`,
   },
   {
     name: 'final', bpm: 92, lead: 'brass', double: 'bell', leadVol: 0.2, bass: 'roots', comp: 'brass', drums: 'anthem', bells: true,

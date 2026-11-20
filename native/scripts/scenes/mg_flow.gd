@@ -38,6 +38,8 @@ const GAMES := [
 	preload("res://scripts/minigames/mg_cards.gd"),
 	preload("res://scripts/minigames/mg_launch.gd"),
 	preload("res://scripts/minigames/mg_rails.gd"),
+	preload("res://scripts/minigames/mg_zombie.gd"),
+	preload("res://scripts/minigames/mg_pearl.gd"),
 ]
 
 static var _metas := {}
@@ -49,6 +51,12 @@ static func meta_of(script: Script) -> Dictionary:
 		_metas[script] = inst.meta()
 		inst.free()
 	return _metas[script]
+
+
+## Játszható-e a minijáték ennyi játékossal (meta: "min_players" / "max_players", alapból 1–8).
+## Gépi kitöltés nincs: ha kevesen vannak, a játék egyszerűen nem kerül sorra.
+static func fits(m: Dictionary, np: int) -> bool:
+	return np >= int(m.get("min_players", 1)) and np <= int(m.get("max_players", 99))
 
 
 static func all_metas() -> Array:
@@ -133,9 +141,9 @@ class SelectScene:
 				return
 		var metas := MgFlow.all_metas()
 		var mode: String = split.mode
-		# a "max_players" kulcsú játékok (pl. Lépcsőverseny) csak legfeljebb ennyi játékossal kerülnek sorra
+		# a létszámkorlátos játékok (pl. Rönklépcső: 3–8 fő) csak megfelelő létszámnál kerülnek sorra
 		var np := G.players.size()
-		metas = metas.filter(func(m): return np <= int(m.get("max_players", 99)))
+		metas = metas.filter(func(m): return MgFlow.fits(m, np))
 		var of_mode: Array = metas.filter(func(m): return m.modes.has(mode))
 		if of_mode.is_empty():
 			mode = "ffa"
@@ -204,7 +212,7 @@ class SelectScene:
 	## A minijátékok, amelyek ennyi játékossal, ebben a módban játszhatók.
 	func _pool(mode: String) -> Array:
 		var np := G.players.size()
-		var metas: Array = MgFlow.all_metas().filter(func(m): return np <= int(m.get("max_players", 99)) and m.modes.has(mode))
+		var metas: Array = MgFlow.all_metas().filter(func(m): return MgFlow.fits(m, np) and m.modes.has(mode))
 		return metas
 
 	## Óceánsztráda párbaj: az egyedül játszó a többiek ellen, egy csapatos minijátékban (valódi játékosok, bot nélkül).
@@ -580,8 +588,13 @@ class TestScene:
 		if Game.mgtest_auto:
 			# gépi végigjátszás (--mgtest): sorban minden minijáték
 			after(1.0, func():
-				var id: String = metas[Game.mgtest_i % metas.size()].id
-				Game.mgtest_i += 1
+				var id := ""
+				for k in metas.size():
+					var m: Dictionary = metas[Game.mgtest_i % metas.size()]
+					Game.mgtest_i += 1
+					if MgFlow.fits(m, G.players.size()):
+						id = m.id
+						break
 				pick(id))
 
 	func input(pid: String, msg: Dictionary) -> void:
@@ -608,6 +621,9 @@ class TestScene:
 	func pick(id: String) -> void:
 		var m = MgFlow.find(id)
 		if leaving or m == null or G.players.is_empty():
+			return
+		if not MgFlow.fits(m, G.players.size()):
+			Audio.play("bad")      # pl. a Rönklépcső 3 főnél kevesebbel nem játszható (bottal sem töltjük fel)
 			return
 		leaving = true
 		print_verbose("[mg] teszt: %s" % id)
@@ -640,8 +656,9 @@ class TestScene:
 			D.panel(c, x, y - (3 if hover else 0), w, h, {"fill": D.shade(col, -0.3 if hover else -0.5), "stroke": Color("#ffd43b") if hover else col, "lw": 4, "r": 18})
 			D.emoji(c, m.icon, x + w / 2, y + h * 0.36 - (3 if hover else 0), h * 0.42)
 			D.text(c, m.name, x + w / 2, y + h * 0.78 - (3 if hover else 0), {"size": 16, "maxw": w - 12})
-			if G.players.size() > int(m.get("max_players", 99)):
-				D.text(c, "max. %d fő" % int(m.max_players), x + w - 8, y + 14, {"size": 12, "align": "right", "color": Color("#ffe066")})
+			if not MgFlow.fits(m, G.players.size()):
+				var lim := "min. %d fő" % int(m.min_players) if G.players.size() < int(m.get("min_players", 1)) else "max. %d fő" % int(m.max_players)
+				D.text(c, lim, x + w - 8, y + 14, {"size": 12, "align": "right", "color": Color("#ffe066")})
 			var mid: String = m.id
 			buttons.append({"rect": rect, "fn": func(): pick(mid)})
 		button(c, 40, 656, 250, 48, "⬅ Vissza a lobbiba", back, {"color": Color("#868e96"), "text_color": Color.WHITE, "size": 20})
@@ -665,7 +682,7 @@ class PlayScene:
 		teams = tm
 
 	func enter() -> void:
-		Audio.music("minigame")
+		Audio.music(str(mg.get("music", "minigame")))      # a minijáték saját zenét is kérhet (meta: "music")
 		inst = mg.script.new()
 		inst.setup(G.players.duplicate(), teams)
 		add_child(inst)

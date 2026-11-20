@@ -42,6 +42,8 @@ func after_boot(args: PackedStringArray) -> void:
 			nb = clampi(int(a.get_slice("=", 1)), 0, 8)
 		elif a == "--autostart":
 			autostart = true
+		elif a == "--cloud":      # Cloudflare-alagút nyitása induláskor (mint a lobbi gombja)
+			Net.tunnel.start(Net.http_port, Net.ws_port)
 		elif a.begins_with("--speed="):
 			Engine.time_scale = float(a.get_slice("=", 1))
 		elif a.begins_with("--shots="):
