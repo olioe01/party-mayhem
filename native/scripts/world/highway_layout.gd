@@ -7,9 +7,9 @@ extends RefCounted
 
 const GOAL := 351
 const CP_BRIDGE := 100           # 1. ellenőrzőpont: felvonóhíd – egy kockával páratlan kell
-const CP_LIGHTS := 200           # 2. ellenőrzőpont: jelzőlámpás kapu – 5 piros-zöld kockából legalább egy zöld
+const CP_LIGHTS := 200           # 2. ellenőrzőpont: jelzőlámpás kapu – 5 piros-zöld kockából több zöld kell, mint piros
 const LIGHT_DICE := 5
-const LIGHT_GREEN_FACES := 2     # a lámpakocka 6 lapjából ennyi zöld
+const LIGHT_GREEN_FACES := 3     # a lámpakockán csak zöld és piros lap van: 6-ból 3 zöld, 3 piros
 const ROCKET_TO := 190           # a rakéta idáig repít (visszafelé soha)
 const FINAL_DICE := 10
 const FINAL_NEED := [40, 35]     # első próbálkozás, utána minden további
@@ -17,7 +17,7 @@ const FINAL_FAIL_BACK := 15
 const MATCH_BONUS := 5           # ha minden kocka ugyanazt mutatja: ennyi plusz kocka
 const DUEL_SOLO_DICE := 5        # „1 a többiek ellen”: ha az egyedül játszó nyer
 const DUEL_TEAM_DICE := 2        # … ha a többiek nyernek, fejenként
-const LAST_BOOST := [10, 20, 30, -1]   # felzárkózó mező kimenetei (-1: UFO az élen állóhoz)
+const LAST_BOOST := [10, 20, 30]       # a felzárkózó kocka lapjai (mindegyik kétszer): ennyit lép előre az utolsó
 const SP := 1.5                  # két mező távolsága (világegység)
 const LANE := 0.86               # két sáv távolsága
 const LANES := 8

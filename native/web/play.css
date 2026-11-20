@@ -103,6 +103,14 @@ input#name:focus { border-color: #ffd43b; }
 .stepbtn.sel { background: var(--pc); color: #fff; border-color: #fff; animation: steppulse 1s ease-in-out infinite; }
 @keyframes steppulse { 0%, 100% { transform: scale(1.06); } 50% { transform: scale(1.12); box-shadow: 0 0 0 6px #ffffff55, 0 6px 0 #0005; } }
 
+/* számláló (Almaszámláló) */
+.cntdisp { font-size: 88px; font-weight: 700; text-align: center; margin: 10px 0; color: #ffd43b; text-shadow: 0 4px 0 #0006; }
+.cntrow { display: grid; grid-template-columns: 1fr 1.6fr; gap: 14px; }
+.cntbtn { padding: 26px 0; font-size: 56px; font-weight: 700; border-radius: 22px; box-shadow: 0 6px 0 #0005; }
+.cntbtn.plus { background: #51cf66; color: #083b1a; }
+.cntbtn.minus { background: #ff8787; color: #4a0d0d; }
+.cntbtn:active { transform: translateY(4px); }
+
 /* nagy koppintó gomb */
 .tapwrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
 .tapbtn {

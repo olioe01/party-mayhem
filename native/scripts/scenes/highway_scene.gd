@@ -77,12 +77,16 @@ func _run() -> void:
 		await _win(G.mtn_winner)
 		return
 	G.round += 1
+	if Game.force_duel and G.hw_duel == "" and G.players.size() > 0:
+		Game.force_duel = false
+		G.hw_duel = G.players[0].pid
 	if G.hw_duel != "" and G.players.size() > 1 and G.by_pid(G.hw_duel) != null:
 		var solo = G.by_pid(G.hw_duel)
 		_cam_all()
 		for p in G.players:
-			Net.set_ctrl(p.pid, {"mode": "wait", "icon": "⚔️", "title": "Párbaj!", "text": "%s a többiek ellen!" % solo.name})
-		await toast("⚔️ %s a többiek ellen!" % solo.name, "Ha %s nyer, %d bónuszkocka az övé; ha a többiek, fejenként %d" % [solo.name, HL.DUEL_SOLO_DICE, HL.DUEL_TEAM_DICE], 3.0, solo)
+			Net.set_ctrl(p.pid, {"mode": "wait", "icon": "⚔️", "title": "Párbaj!", "text": "%s párbajozik – mindjárt kiderül, kik ellen!" % solo.name})
+		var vs_txt := "3 véletlenül sorsolt ellenfél ellen" if G.players.size() >= 4 else "egy véletlenül sorsolt ellenféllel kettesben"
+		await toast("⚔️ %s párbaja!" % solo.name, "%s %s játszik. Ha nyer, +%d kocka; ha az ellenfelek, fejenként +%d" % [solo.name, vs_txt, HL.DUEL_SOLO_DICE, HL.DUEL_TEAM_DICE], 3.0, solo)
 		G.hw_duel_now = true
 		Main.I.set_scene(MgFlow.SelectScene.new())
 		return
@@ -116,11 +120,11 @@ func _intro() -> void:
 	h3.cam_follow(HL.pos(HL.CP_BRIDGE), "mid", 1.4, HL.CP_BRIDGE)
 	await toast("🌉 100: Felvonóhíd", "Egy kockával páratlan kell (1, 3, 5) – ha nem sikerül, egyet visszalépsz. Ha valaki egyszer leengedi, mindenkinek nyitva marad.", 3.8)
 	h3.cam_follow(HL.pos(HL.CP_LIGHTS), "mid", 1.4, HL.CP_LIGHTS)
-	await toast("🚦 200: Jelzőlámpás kapu", "%d lámpakockából legalább egy legyen zöld! Ha valaki kinyitja, mindenkinek nyitva marad, és onnantól az utolsó helyezett választ minijátékot." % HL.LIGHT_DICE, 4.0)
+	await toast("🚦 200: Jelzőlámpás kapu", "%d zöld-piros lámpakockával több zöld kell, mint piros! Ha valaki kinyitja, örökre nyitva marad mindenkinek, és onnantól az utolsó helyezett választ minijátékot." % HL.LIGHT_DICE, 4.0)
 	h3.cam_follow(HL.pos(HL.GOAL), "mid", 1.4, HL.GOAL)
 	await toast("🏁 %d: Célkapu" % HL.GOAL, "%d kockával legalább %d kell (ha elsőre nem megy, utána %d). Ha nem sikerül: %d mezőt vissza." % [HL.FINAL_DICE, HL.FINAL_NEED[0], HL.FINAL_NEED[1], HL.FINAL_FAIL_BACK], 4.0)
 	h3.cam_follow(HL.pos(0), "mid", 1.6, 0)
-	await toast("⏩ Különleges mezők", "Hátszél és szembeszél, kék és piros kockamező, UFO, rakéta, felzárkózó és „1 a többiek ellen”.", 3.4)
+	await toast("⏩ Különleges mezők", "Hátszél és szembeszél, kék és piros kockamező, UFO, rakéta, felzárkózó (aki rálép, dob: +10/+20/+30 az utolsónak) és „1 a többiek ellen”.", 3.4)
 	await toast("🎮 Kezdjük egy minijátékkal!", "", 1.6)
 
 
@@ -149,19 +153,21 @@ func turn(p) -> void:
 	await sleep(0.4)
 
 
-## Dobás: n kocka (kind: "std" = hatoldalú, "light" = piros/zöld lámpakocka). Igaz allow_match esetén
+## Dobás: n kocka (kind: "std" = hatoldalú, "light" = piros/zöld lámpakocka, "boost" = +10/+20/+30-as felzárkózó kocka). Igaz allow_match esetén
 ## egyforma kockáknál +HL.MATCH_BONUS kocka. Visszaad: {total, vals, matched, grade}.
 func roll_dice(p, n: int, kind: String, allow_match: bool, hint: String, judge := true) -> Dictionary:
 	var g := ground(p)
 	dice = {"p": p, "origin": g.pos, "vals": [], "kind": kind, "t0s": [], "gold": false, "bonus_from": 99}
 	total_fx = null
 	h3.cam_follow(g.pos, "close" if n <= 3 else "near", 3.0, g.s)
-	var label := "🎲 DOBJ!" if kind == "std" else "🚦 DOBJ!"
+	var label: String = {"std": "🎲 DOBJ!", "light": "🚦 DOBJ!", "boost": "🆙 DOBJ!"}.get(kind, "🎲 DOBJ!")
 	await Net.ask(p.pid, {"mode": "tap", "label": label, "hint": hint, "botAuto": true}, ["tap"], 25)
 	var vals: Array = []
 	for i in n:
 		if kind == "light":
 			vals.append(1 if randi_range(1, 6) <= HL.LIGHT_GREEN_FACES else 0)
+		elif kind == "boost":
+			vals.append(HL.LAST_BOOST[randi() % HL.LAST_BOOST.size()])
 		else:
 			vals.append(randi_range(1, 6))
 	dice.vals = vals.duplicate()
@@ -312,11 +318,12 @@ func lights(p) -> bool:
 	h3.gate_target = 0.0
 	h3.gate_light = "blink"
 	h3.cam_at(HL.pos(HL.CP_LIGHTS) + HL.rot(HL.CP_LIGHTS, Vector3(0, 1.6, -1.0)), Vector3(5.0, 4.2, 8.0), 2.5, HL.heading(HL.CP_LIGHTS))
-	await toast("🚦 Jelzőlámpás kapu", "%s %d lámpakockával dob: legalább egy legyen ZÖLD!" % [p.name, HL.LIGHT_DICE], 2.0, p)
-	var r := await roll_dice(p, HL.LIGHT_DICE, "light", false, "Legalább egy zöld kell!", false)
+	await toast("🚦 Jelzőlámpás kapu", "%s %d lámpakockával dob: több ZÖLD kell, mint piros!" % [p.name, HL.LIGHT_DICE], 2.0, p)
+	var r := await roll_dice(p, HL.LIGHT_DICE, "light", false, "Több zöld kell, mint piros!", false)
 	var greens: int = r.total
-	print_verbose("[hw] lámpa: %s -> %d zöld" % [p.name, greens])
-	if greens > 0:
+	var reds: int = HL.LIGHT_DICE - greens
+	print_verbose("[hw] lámpa: %s -> %d zöld, %d piros" % [p.name, greens, reds])
+	if greens > reds:
 		p.hw_cp = 2
 		G.hw_open = maxi(G.hw_open, 2)
 		h3.gate_light = "green"
@@ -325,7 +332,7 @@ func lights(p) -> bool:
 		Audio.play("fanfare")
 		h3.pose(p.pid, "cheer", 1.8)
 		h3.crowd(float(p.node), true)
-		await toast("🚦 ZÖLD! Nyílik a kapu!", "%d zöld lámpa – %s mehet tovább, és a kapu mostantól mindenkinek nyitva marad." % [greens, p.name], 2.4, p)
+		await toast("🚦 ZÖLD! Nyílik a kapu!", "%d zöld, %d piros – %s mehet tovább, és a kapu örökre nyitva marad mindenkinek." % [greens, reds, p.name], 2.4, p)
 		if not G.hw_choose:
 			G.hw_choose = true
 			await toast("🎮 Mostantól az utolsó választ", "Minden kör előtt a sereghajtó választ minijátékot három közül.", 2.6)
@@ -334,7 +341,7 @@ func lights(p) -> bool:
 	Audio.play("fail")
 	h3.pose(p.pid, "hips", 1.8)
 	h3.crowd(float(p.node), false)
-	await toast("🚦 Mind piros!", "%s egyet visszalép, és legközelebb újra próbálja." % p.name, 2.2, p)
+	await toast("🚦 Több a piros!", "%d zöld, %d piros – %s egyet visszalép, és legközelebb újra próbálja." % [greens, reds, p.name], 2.2, p)
 	await back(p, 1)
 	return false
 
@@ -419,31 +426,41 @@ func land(p) -> void:
 			await _duel_space(p)
 
 
+## Felzárkózó mező: BÁRKI lép rá, ő dob a felzárkózó kockával (+10 / +20 / +30), és annyit lép előre
+## az, aki abban a pillanatban az utolsó (holtversenynél mindegyik utolsó). Ellenőrzőponton nem fut át:
+## ott megáll, és a saját körében próbálkozik.
 func _last_boost(p) -> void:
+	Audio.play("coin")
+	h3.crowd(float(p.node), true)
+	await toast("🆙 Felzárkózó mező!", "%s dob a felzárkózó kockával: amennyit dob (+10, +20 vagy +30), annyit lép előre az utolsó!" % p.name, 2.2, p)
+	var r := await roll_dice(p, 1, "boost", false, "+10 / +20 / +30 az utolsónak!", false)
+	var amount: int = r.total
 	var low := 999999
 	for q in G.players:
 		low = mini(low, q.node)
-	if p.node > low:
-		await toast("🆙 Felzárkózó mező", "Csak az utolsó helyezettnek segít – %s most nem az." % p.name, 1.8, p)
-		return
-	var opt: int = HL.LAST_BOOST[randi() % HL.LAST_BOOST.size()]
-	if opt < 0:
-		var lead = null
-		for q in G.players:
-			if q != p and (lead == null or q.node > lead.node):
-				lead = q
-		if lead == null or lead.node <= p.node:
-			opt = 30
-		else:
-			Audio.play("fanfare")
-			await toast("🆙 Felzárkózó: UFO!", "%s egyenesen a vezető %s mellé repül!" % [p.name, lead.name], 2.0, p)
-			await transport(p, "ufo", lead.node)
-			return
+	var lasts: Array = G.players.filter(func(q): return q.node == low)
+	var names := ", ".join(lasts.map(func(q): return q.name))
+	print_verbose("[hw] felzárkózó: %s dobott +%d -> %s" % [p.name, amount, names])
 	Audio.play("fanfare")
-	h3.pose(p.pid, "cheer", 1.6)
-	h3.crowd(float(p.node), true)
-	await toast("🆙 Felzárkózó: +%d!" % opt, "%s, a sereghajtó, előrefut %d mezőt" % [p.name, opt], 1.8, p)
-	await move(p, opt)
+	for q in lasts:
+		h3.pose(q.pid, "cheer", 1.6)
+	await toast("🆙 +%d az utolsónak!" % amount, "%s előrefut %d mezőt" % [names, amount], 1.9, lasts[0])
+	for q in lasts:
+		await _boost_run(q, amount)
+
+
+func _boost_run(q, n: int) -> void:
+	var cp := HL.next_cp(cp_done(q))
+	var to: int = mini(q.node + n, cp)
+	if to <= q.node:
+		return
+	var g := ground(q)
+	h3.cam_follow(g.pos, "near", 2.5, g.s)
+	walk = {"pid": q.pid, "left": to - q.node, "dir": 1}
+	await run(q, to)
+	walk = null
+	if q.node == cp:
+		await toast("⛔ Ellenőrzőpont", "%s itt megáll – a saját körében próbálkozik." % q.name, 1.6, q)
 
 
 func _duel_space(p) -> void:
@@ -468,7 +485,8 @@ func _duel_space(p) -> void:
 	G.hw_duel = p.pid
 	Audio.play("horn")
 	h3.pose(p.pid, "fist", 1.6)
-	await toast("⚔️ %s a többiek ellen!" % p.name, "A kör végén párbaj-minijáték: ha %s nyer, %d bónuszkocka; ha a többiek, fejenként %d." % [p.name, HL.DUEL_SOLO_DICE, HL.DUEL_TEAM_DICE], 2.8, p)
+	var vs_txt := "1 a 3 ellen: 3 véletlenül sorsolt ellenféllel" if G.players.size() >= 4 else "kettesben egy véletlen ellenféllel"
+	await toast("⚔️ Párbaj-mező: %s!" % p.name, "A kör végén párbaj-minijáték (%s). Ha %s nyer, +%d kocka; ha az ellenfelek, fejenként +%d." % [vs_txt, p.name, HL.DUEL_SOLO_DICE, HL.DUEL_TEAM_DICE], 3.0, p)
 
 
 ## A párbaj eredménye után (G.hw_bonus): a nyertesek bónuszkockákkal dobnak és előrefutnak.

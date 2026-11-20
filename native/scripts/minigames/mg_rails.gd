@@ -54,7 +54,7 @@ func meta() -> Dictionary:
 	return {"id": "rails", "name": "Sínharc", "icon": "🚃", "color": "#2f80ff", "modes": ["ffa"],
 		"tagline": "Lődd hátba a többieket!",
 		"desc": "Kis ágyús kocsikkal száguldoztok a várudvar sínjein. Elölről páncél véd, de hátul mindenkinek céltábla van: azt kell eltalálni! Három találat és kiestél. 60 másodperc után a több életerő nyer.",
-		"controls": "A joystickkal választod ki, merre fordulj a kereszteződésben (hátrahúzva megfordulsz), a TŰZ gombbal lősz. A hedge-sövény és a fal elnyeli a lövést."}
+		"controls": "A joystickkal választod ki, merre fordulj a kereszteződésben (megfordulni nem lehet), a TŰZ gombbal lősz. A hedge-sövény és a fal elnyeli a lövést."}
 
 
 func layout(_p) -> Dictionary:
@@ -599,20 +599,8 @@ func input(p, msg: Dictionary) -> void:
 	match msg.get("t"):
 		"stick":
 			s.stick = Vector2(float(msg.get("x", 0)), float(msg.get("y", 0))).limit_length(1.0)
-			_stick_reverse(s)
 		"btn":
 			_fire(s)
-
-
-## erősen hátrahúzott kar: megfordul (kis várakozással, hogy ne pörögjön)
-func _stick_reverse(s: Dictionary) -> void:
-	var st: Vector2 = s.stick
-	if st.length() < 0.6 or t - s.rev_t < 0.5:
-		return
-	var w := Vector3(st.x, 0, st.y).normalized()
-	if w.dot(s.hd) < -0.75:
-		_reverse(s)
-		_place(s)
 
 
 func bot(p, dt: float) -> void:
@@ -653,13 +641,7 @@ func _ai(s: Dictionary, dt: float) -> void:
 	if randf() < AI_WRONG[lvl]:
 		want = Vector2(randf_range(-1, 1), randf_range(-1, 1)).normalized()
 	s.stick = want
-	# megfordulás, ha a cél egyértelműen mögötte van
-	s.ai_rev -= AI_THINK[lvl]
-	var tv := Vector3(to_goal.x, 0, to_goal.z)
-	if s.ai_rev <= 0.0 and tv.length() > 2.0 and tv.normalized().dot(s.hd) < -0.6:
-		_reverse(s)
-		_place(s)
-		s.ai_rev = AI_REV_CD[lvl] * randf_range(0.8, 1.3)
+	# 180 fokos megfordulás nincs: a gép is csak a kereszteződésekben kanyarodik
 	# lövés: ha a (sebességgel előre számolt) célpont az ágyú vonalában van
 	if s.cd > 0.0:
 		return

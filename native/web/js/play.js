@@ -226,6 +226,20 @@ function connectHost() {
       }));
     },
 
+    // számláló (Almaszámláló): + / − gomb és KÉSZ; a kijelzett szám a telefonon azonnal frissül
+    counter(l) {
+      let v = Number(l.value) || 0;
+      screen.innerHTML = `<h2>${esc(l.title || 'Számolj!')}</h2>${l.text ? `<p>${esc(l.text)}</p>` : ''}
+        <div class="cntdisp" id="cnt">${v}</div>
+        <div class="cntrow"><button class="cntbtn minus" id="cm">−</button><button class="cntbtn plus" id="cp">+</button></div>
+        ${l.doneOk ? '<button class="primary" id="cd" style="margin-top:16px">✔ KÉSZ, ez a válaszom</button>' : ''}`;
+      const disp = document.getElementById('cnt');
+      const set = (nv) => { v = Math.max(0, Math.min(99, nv)); disp.textContent = v; buzz(12); send({ t: 'cnt', v }); };
+      document.getElementById('cp').addEventListener('pointerdown', (e) => { e.preventDefault(); set(v + 1); });
+      document.getElementById('cm').addEventListener('pointerdown', (e) => { e.preventDefault(); set(v - 1); });
+      document.getElementById('cd')?.addEventListener('click', (e) => { e.target.disabled = true; buzz(40); send({ t: 'done', v }); });
+    },
+
     tap(l) {
       screen.innerHTML = `<div class="tapwrap"><button class="tapbtn" id="tap">${esc(l.label || 'NYOMD!')}</button><p>${esc(l.hint || '')}</p></div>`;
       const b = document.getElementById('tap');

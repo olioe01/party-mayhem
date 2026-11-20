@@ -246,21 +246,26 @@ func draw(c: CanvasItem) -> void:
 	D.panel(c, 95, 222, 290, 290, {"r": 18, "fill": Color.WHITE, "stroke": null, "shadow": false})
 	if qr_tex:
 		c.draw_texture_rect(qr_tex, Rect2(105, 232, 270, 270), false)
-	D.text(c, "Olvasd be, vagy írd be:", 240, 540, {"size": 19, "color": Color("#cfc6f5")})
-	D.text(c, url.replace("http://", "").replace("https://", ""), 240, 574, {"size": 28, "color": Color("#ffd43b"), "maxw": 350})
+	# a Cloudflare-gomb a panelen belül van (alatta az online-játék gombja ülne rajta)
 	var tn = Net.tunnel
+	var info := "Olvasd be, vagy írd be:"
+	var info_col := Color("#cfc6f5")
 	if Net.server_error != "":
-		D.text(c, Net.server_error, 240, 607, {"size": 14, "color": Color("#ff8787"), "maxw": 360})
+		info = Net.server_error
+		info_col = Color("#ff8787")
 	elif tn.state == "on":
-		D.text(c, "🌐 Interneten át: bármilyen hálózatról (mobilnetről is)!", 240, 607, {"size": 15, "color": Color("#69db7c"), "maxw": 360})
+		info = "🌐 Interneten át – bármilyen hálózatról!"
+		info_col = Color("#69db7c")
 	elif tn.state == "error":
-		D.text(c, tn.message, 240, 607, {"size": 14, "color": Color("#ff8787"), "maxw": 360})
+		info = tn.message
+		info_col = Color("#ff8787")
 	elif tn.is_busy():
-		D.text(c, tn.message, 240, 607, {"size": 15, "color": Color("#ffe8a3"), "maxw": 360})
-	else:
-		D.text(c, "Ugyanazon a Wi-Fi hálózaton legyél!", 240, 607, {"size": 16, "color": Color("#a99fd6"), "bold": false})
-	var cl := "🏠 Vissza a helyi hálózatra" if tn.state == "on" else ("⏳ Megszakítás" if tn.is_busy() else "🌐 Nem megy? Csatlakozás interneten át")
-	button(c, 70, 636, 340, 30, cl, toggle_cloud, {"color": Color("#868e96") if tn.state == "on" or tn.is_busy() else Color("#f59f00"), "size": 15})
+		info = tn.message
+		info_col = Color("#ffe8a3")
+	D.text(c, info, 240, 536, {"size": 17, "color": info_col, "maxw": 360})
+	D.text(c, url.replace("http://", "").replace("https://", ""), 240, 566, {"size": 26, "color": Color("#ffd43b"), "maxw": 350})
+	var cl := "🏠 Vissza a helyi Wi-Fi-re" if tn.state == "on" else ("⏳ Megszakítás" if tn.is_busy() else "🌐 Nem megy Wi-Fin? Interneten át (C)")
+	button(c, 66, 588, 348, 32, cl, toggle_cloud, {"color": Color("#868e96") if tn.state == "on" or tn.is_busy() else Color("#f59f00"), "size": 16})
 
 	D.text(c, "Játékosok (%d/%d)" % [G.players.size(), G.MAX_PLAYERS], 470, 152, {"size": 26, "align": "left"})
 	button(c, 1030, 137, 212, 26, "🧪 Minijáték teszt", open_test, {"color": Color("#b197fc") if not G.players.is_empty() else Color("#555555"), "size": 15})

@@ -2,6 +2,7 @@ extends Node
 ## A játék menete: lobby -> tábla -> minijáték -> ... -> végeredmény
 
 var force_mg := ""
+var force_duel := false          # --duel: az első kör végén az első játékos párbajozik (teszthez)
 var test_start_node := 0     # --start-node=N: hegymászás teszteléséhez, a rajt helyett innen indul mindenki
 var test_shots := false
 var mgtest_auto := false     # --mgtest: a lobbiból a tesztfelület nyílik, és sorban végigjátssza a minijátékokat
@@ -27,6 +28,8 @@ func apply_args(args: PackedStringArray) -> void:
 			mgtest_auto = true
 			if a.contains("="):
 				mgtest_i = int(a.get_slice("=", 1))
+		elif a == "--duel":
+			force_duel = true
 		elif a == "--small":
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 			DisplayServer.window_set_size(Vector2i(960, 540))

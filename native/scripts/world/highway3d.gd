@@ -1242,13 +1242,22 @@ func _render_dice(dc, now: float) -> void:
 		var m: StandardMaterial3D = b.mat
 		var v: int = vals[i]
 		var light: bool = dc.kind == "light"
-		if light:
+		if dc.kind == "boost":
+			# felzárkózó kocka: arany, a lapokon +10 / +20 / +30
+			m.albedo_color = Color("#f5b301")
+			m.emission = m.albedo_color
+			for l in b.labels:
+				(l as Label3D).text = "+%d" % (v if settled else HL.LAST_BOOST[int(t * 10.0 + i) % HL.LAST_BOOST.size()])
+				(l as Label3D).modulate = Color("#2b1055")
+				(l as Label3D).font_size = 72
+		elif light:
 			var green: bool = v == 1 if settled else fmod(t * 8.0 + i, 2.0) < 1.0
 			m.albedo_color = Color("#2fb344") if green else Color("#e03131")
 			m.emission = m.albedo_color
 			for l in b.labels:
 				(l as Label3D).text = "OK" if green else "X"
 				(l as Label3D).modulate = Color.WHITE
+				(l as Label3D).font_size = 110
 		else:
 			var gold: bool = dc.get("gold", false) and settled
 			var bonus: bool = i >= int(dc.get("bonus_from", 99))
@@ -1258,6 +1267,7 @@ func _render_dice(dc, now: float) -> void:
 			for l in b.labels:
 				(l as Label3D).text = str(v if settled else (int(t * 14.0 + i * 3) % 6 + 1))
 				(l as Label3D).modulate = Color("#2b1055") if not bonus else Color("#c2255c")
+				(l as Label3D).font_size = 110
 
 
 func _render_gates(dt: float) -> void:

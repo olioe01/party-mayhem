@@ -40,6 +40,9 @@ const GAMES := [
 	preload("res://scripts/minigames/mg_rails.gd"),
 	preload("res://scripts/minigames/mg_zombie.gd"),
 	preload("res://scripts/minigames/mg_pearl.gd"),
+	preload("res://scripts/minigames/mg_beachball.gd"),
+	preload("res://scripts/minigames/mg_logs.gd"),
+	preload("res://scripts/minigames/mg_apples.gd"),
 ]
 
 static var _metas := {}
@@ -57,6 +60,18 @@ static func meta_of(script: Script) -> Dictionary:
 ## Gépi kitöltés nincs: ha kevesen vannak, a játék egyszerűen nem kerül sorra.
 static func fits(m: Dictionary, np: int) -> bool:
 	return np >= int(m.get("min_players", 1)) and np <= int(m.get("max_players", 99))
+
+
+## A minijáték résztvevői: csapatoknál a két csapat tagjai (a párbajban csak a kiválasztottak),
+## egyébként mindenki. A sorrend a G.players sorrendje.
+static func participants(tm: Array) -> Array:
+	if tm.size() == 2:
+		return G.players.filter(func(p): return tm[0].has(p) or tm[1].has(p))
+	return G.players.duplicate()
+
+
+## Az „1 a 3 ellen” párbaj saját minijátékai (4+ játékosnál ezek közül sorsolunk).
+const DUEL_GAMES := ["beachball", "logs", "apples"]
 
 
 static func all_metas() -> Array:
@@ -215,30 +230,75 @@ class SelectScene:
 		var metas: Array = MgFlow.all_metas().filter(func(m): return MgFlow.fits(m, np) and m.modes.has(mode))
 		return metas
 
-	## Óceánsztráda párbaj: az egyedül játszó a többiek ellen, egy csapatos minijátékban (valódi játékosok, bot nélkül).
+	## Óceánsztráda párbaj: a mezőre lépő (SOLO) 4+ játékosnál 3 véletlenül sorsolt ellenfél ellen játszik
+	## a három párbaj-minijáték egyikében; 2–3 játékosnál egy véletlen ellenféllel kettesben egy meglévő
+	## minijátékban. A többiek kimaradnak és várnak. Gépi kitöltés nincs.
 	func _duel_setup() -> bool:
 		var solo = G.by_pid(G.hw_duel)
 		if solo == null or G.players.size() < 2:
 			G.hw_duel_now = false
 			return false
-		var rivals: Array = G.players.filter(func(p): return p != solo)
-		split = {"mode": "1v3", "colors": {}, "teams": [rivals, [solo]]}
+		var others: Array = G.players.filter(func(p): return p != solo)
+		others.shuffle()
+		var rivals: Array = others.slice(0, 3) if G.players.size() >= 4 else others.slice(0, 1)
+		split = {"mode": "1v3" if rivals.size() == 3 else "1v1", "colors": {}, "teams": [rivals, [solo]]}
 		for p in rivals:
 			split.colors[p.pid] = 0
 		split.colors[solo.pid] = 1
 		G.team_split = split.teams
 		duel = true
-		var pool: Array = _pool("1v3").filter(func(m): return m.id != "tug")
+		var pool: Array
+		if rivals.size() == 3:
+			pool = MgFlow.all_metas().filter(func(m): return MgFlow.DUEL_GAMES.has(m.id))
+		else:
+			pool = MgFlow.all_metas().filter(func(m): return m.modes.has("ffa") and MgFlow.fits(m, 2))
 		choice = pool[randi() % pool.size()]
-		print_verbose("[hw] párbaj: %s a többiek ellen – %s" % [solo.name, choice.id])
+		print_verbose("[hw] párbaj: %s vs %s – %s" % [solo.name, ", ".join(rivals.map(func(p): return p.name)), choice.id])
 		_make_strip()
+		var names := ", ".join(rivals.map(func(p): return p.name))
 		for p in G.players:
-			Net.set_ctrl(p.pid, {"mode": "wait", "icon": "⚔️", "title": "Párbaj-minijáték…", "text": "%s a többiek ellen!" % solo.name})
+			if p == solo:
+				Net.set_ctrl(p.pid, {"mode": "wait", "icon": "⚔️", "title": "Párbaj!", "text": "Te játszol egyedül: %s ellen!" % names})
+			elif rivals.has(p):
+				Net.set_ctrl(p.pid, {"mode": "wait", "icon": "⚔️", "title": "Párbaj!", "text": "Te is %s ellen játszol!" % solo.name})
+			else:
+				Net.set_ctrl(p.pid, {"mode": "wait", "icon": "⏳", "title": "Most kimaradsz", "text": "%s és %s párbajozik – várj, amíg véget ér!" % [solo.name, names]})
 		Main.I.world_env.environment = null
-		stage = "roll"
-		roll_t0 = t
-		after(dur + 1.6, func(): Main.I.set_scene(MgFlow.IntroScene.new(choice, G.team_split)))
+		Audio.play("horn")
+		stage = "vs"
+		after(3.2, func():
+			stage = "roll"
+			roll_t0 = t)
+		after(3.2 + dur + 1.6, func(): Main.I.set_scene(MgFlow.IntroScene.new(choice, G.team_split)))
 		return true
+
+	## Bemutató: bal oldalt a mezőre lépő, jobb oldalt az ellenfelei.
+	func _draw_vs(c: CanvasItem) -> void:
+		var solo: Array = split.teams[1]
+		var rivals: Array = split.teams[0]
+		var k := D.ease_out_back(minf(1.0, t * 2.0))
+		D.text(c, "⚔️ PÁRBAJ ⚔️" if rivals.size() == 1 else "⚔️ 1 A 3 ELLEN ⚔️", 640, 100, {"size": 54, "stroke": D.DARK, "sw": 10, "color": Color("#ffd43b")})
+		var sx := 330.0 - (1.0 - k) * 500.0
+		D.panel(c, sx - 190, 170, 380, 430, {"r": 30, "fill": Color(MgFlow.TEAM_COLORS[1], 0.35), "stroke": MgFlow.TEAM_COLORS[1], "lw": 6})
+		D.text(c, "EGYEDÜL", sx, 210, {"size": 26, "color": Color("#ffe066")})
+		for p in solo:
+			D.avatar(c, p, sx, 360, 92)
+			D.text(c, p.name, sx, 500, {"size": 34, "maxw": 340})
+			D.text(c, "Ha nyer: +%d kocka" % HighwayLayout.DUEL_SOLO_DICE, sx, 550, {"size": 20, "color": Color("#c3fae8")})
+		var vk := clampf((t - 0.3) * 3.0, 0.0, 1.0)
+		c.draw_set_transform(Vector2(640, 385), 0, Vector2.ONE * (0.5 + D.ease_out_back(vk) * 0.5))
+		D.text(c, "VS", 0, 0, {"size": 96, "stroke": D.DARK, "sw": 12, "color": Color("#ff6b6b"), "alpha": vk})
+		c.draw_set_transform(Vector2.ZERO)
+		var rx := 950.0 + (1.0 - k) * 500.0
+		D.panel(c, rx - 190, 170, 380, 430, {"r": 30, "fill": Color(MgFlow.TEAM_COLORS[0], 0.35), "stroke": MgFlow.TEAM_COLORS[0], "lw": 6})
+		D.text(c, "ELLENFELEK" if rivals.size() > 1 else "ELLENFÉL", rx, 210, {"size": 26, "color": Color("#ffe066")})
+		for i in rivals.size():
+			var p = rivals[i]
+			var y := 300.0 + i * 95.0 if rivals.size() > 1 else 360.0
+			var r := 38.0 if rivals.size() > 1 else 92.0
+			D.avatar(c, p, rx - 110 if rivals.size() > 1 else rx, y, r)
+			D.text(c, p.name, rx - 55 if rivals.size() > 1 else rx, y + (0 if rivals.size() > 1 else 140), {"size": 28, "align": "left" if rivals.size() > 1 else "center", "maxw": 220})
+		D.text(c, "Ha nyernek: +%d kocka fejenként" % HighwayLayout.DUEL_TEAM_DICE, rx, 575, {"size": 20, "color": Color("#c3fae8")})
 
 	## A 200-as kapu után: az utolsó helyezett (holtversenyben sorsolt) választ három minijáték közül.
 	func _choose_setup() -> void:
@@ -323,9 +383,12 @@ class SelectScene:
 		if stage == "pick":
 			_draw_pick(c)
 			return
+		if stage == "vs":
+			_draw_vs(c)
+			return
 		var mode_txt: String = {"ffa": "🎰 MINIJÁTÉK SORSOLÁS 🎰", "2v2": "🎰 2 A 2 ELLEN 🎰", "1v3": "🎰 1 A 3 ELLEN 🎰"}.get(split.mode, "🎰")
 		if duel:
-			mode_txt = "⚔️ 1 A TÖBBIEK ELLEN ⚔️"
+			mode_txt = "⚔️ 1 A 3 ELLEN ⚔️" if split.teams[0].size() == 3 else "⚔️ PÁRBAJ ⚔️"
 		D.text(c, mode_txt, 640, 110, {"size": 48, "stroke": D.DARK, "sw": 10, "color": Color("#ffd43b")})
 		var ps := pos()
 		var spacing := 300.0
@@ -406,12 +469,18 @@ class IntroScene:
 		pv_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		vp.add_child(pv_canvas)
 		pv_canvas.draw.connect(_pv_draw)
+		var parts := MgFlow.participants(teams)
 		for p in G.players:
-			Net.set_ctrl(p.pid, {"mode": "wait", "icon": mg.icon, "title": mg.name, "text": _controls_for(p)})
+			if parts.has(p):
+				Net.set_ctrl(p.pid, {"mode": "wait", "icon": mg.icon, "title": mg.name, "text": _controls_for(p)})
+			else:
+				# kimarad (pl. párbajnál): nem kell rá várni
+				ready_set[p.pid] = true
+				Net.set_ctrl(p.pid, {"mode": "wait", "icon": "⏳", "title": "Most kimaradsz", "text": "Nézd a nagy képernyőt, amíg a párbaj tart!"})
 		_spawn(2.2)
 		# a gépi játékosok pár másodperc múlva készek
 		var k := 0
-		for p in G.players:
+		for p in parts:
 			if Net.is_auto(p.pid):
 				var pid: String = p.pid
 				after(3.0 + k * 0.5 + randf() * 1.5, func(): _ready_up(pid))
@@ -446,7 +515,7 @@ class IntroScene:
 		print_verbose("[mg] próbakör %d: %s" % [pv_round, mg.id])
 		inst = mg.script.new()
 		inst.preview = true
-		inst.setup(G.players.duplicate(), teams)
+		inst.setup(MgFlow.participants(teams), teams)
 		vp.add_child(inst)
 		vp.move_child(inst, 0)
 		if inst.cam and inst.env:
@@ -634,6 +703,9 @@ class TestScene:
 			sh.shuffle()
 			var cut: int = 1 if (m.modes[0] == "1v3" or sh.size() < 4) else sh.size() / 2
 			teams = [sh.slice(cut), sh.slice(0, cut)]
+			# a párbaj-játékok mindig 1 a 3 ellen: a többiek kimaradnak
+			if MgFlow.DUEL_GAMES.has(m.id):
+				teams = [sh.slice(1, 4), sh.slice(0, 1)]
 		G.team_split = teams
 		Main.I.set_scene(MgFlow.IntroScene.new(m, teams))
 
@@ -684,10 +756,13 @@ class PlayScene:
 	func enter() -> void:
 		Audio.music(str(mg.get("music", "minigame")))      # a minijáték saját zenét is kérhet (meta: "music")
 		inst = mg.script.new()
-		inst.setup(G.players.duplicate(), teams)
+		inst.setup(MgFlow.participants(teams), teams)
 		add_child(inst)
 		for p in G.players:
-			Net.set_ctrl(p.pid, {"mode": "wait", "icon": mg.icon, "title": "Készülj…", "text": "Mindjárt indul!"})
+			if inst.players.has(p):
+				Net.set_ctrl(p.pid, {"mode": "wait", "icon": mg.icon, "title": "Készülj…", "text": "Mindjárt indul!"})
+			else:
+				Net.set_ctrl(p.pid, {"mode": "wait", "icon": "⏳", "title": "Most kimaradsz", "text": "Nézd a nagy képernyőt, amíg a párbaj tart!"})
 
 	func update(dt: float) -> void:
 		if phase == "count":
@@ -791,11 +866,18 @@ class ResultScene:
 		if teams.size() == 2:
 			_team_result()
 			_celebrate()
+			_notify_waiting()
 			return
 		_ffa_rows()
 		if (mg.get("keep_ties", false) and not (G.is_highway() and not G.mg_test)) or not _tie_start():
 			_ffa_finish()
 			_celebrate()
+
+	## Akik nem játszottak (párbajból kimaradtak), azoknak is szólunk.
+	func _notify_waiting() -> void:
+		for p in G.players:
+			if not rows.any(func(r): return r.p == p):
+				Net.set_ctrl(p.pid, {"mode": "wait", "icon": "⚔️", "title": "A párbaj véget ért", "text": "Mindjárt folytatódik a játék!"})
 
 	func exit() -> void:
 		if stage_vp:
