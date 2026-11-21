@@ -102,6 +102,12 @@ func _lan_addresses() -> PackedStringArray:
 			elif ip.begins_with("172."): score = 2
 			if name.contains("wi-fi") or name.contains("wifi") or name.contains("wlan") or name.begins_with("wl"): score -= 1
 			scored.append([score, ip])
+	# Windowson a lecsatlakozott csatoló elavult ("Deprecated") címe 169.254-es vészcím nélkül is
+	# megmaradhat; az ipconfig csak az élő címeket írja ki, ezért ha van ipconfig-kimenet,
+	# csak az abban szereplő címeket tartjuk meg
+	var live := _windows_live_ips()
+	if not live.is_empty():
+		scored = scored.filter(func(s): return live.has(s[1]))
 	scored.sort_custom(func(a, b): return a[0] < b[0])
 	var out := PackedStringArray()
 	for s in scored:
@@ -111,6 +117,20 @@ func _lan_addresses() -> PackedStringArray:
 			if ip.is_valid_ip_address() and not ip.contains(":") and not ip.begins_with("127.") and not ip.begins_with("169.254."):
 				out.append(ip)
 	return out
+
+
+func _windows_live_ips() -> Dictionary:
+	var live := {}
+	if OS.get_name() != "Windows":
+		return live
+	var output: Array = []
+	if OS.execute("ipconfig", [], output) != 0 or output.is_empty():
+		return live
+	var re := RegEx.new()
+	re.compile("\\b(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})\\b")
+	for m in re.search_all(str(output[0])):
+		live[m.get_string(1)] = true
+	return live
 
 
 func join_url() -> String:

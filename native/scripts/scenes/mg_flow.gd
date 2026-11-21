@@ -850,6 +850,7 @@ class ResultScene:
 	var tie_round := 0
 	var tie_t0 := 0.0
 	var tie_closing := false
+	var duel_tie := false  # párbaj-döntetlen (1v1): kockadobás dönti el, melyik oldal nyer
 	var res_t0 := 0.0
 	# 3D-s színpad a jobb oldalon: a figurák helyezés szerint reagálnak (csak látvány)
 	var stage_vp: SubViewport
@@ -865,6 +866,8 @@ class ResultScene:
 		Main.I.world_env.environment = null
 		if teams.size() == 2:
 			_team_result()
+			if stage == "tie":
+				return
 			_celebrate()
 			_notify_waiting()
 			return
@@ -969,8 +972,21 @@ class ResultScene:
 		# akik ugyanannyit dobtak, újra dobnak
 		if not _tie_start():
 			stage = "result"
+			if duel_tie:
+				_duel_tie_done()
+				return
 			_ffa_finish()
 			_celebrate()
+
+	## A párbaj nem végződhet döntetlenül: a kockadobás nyertesének oldala nyer.
+	func _duel_tie_done() -> void:
+		team_win = int(rows[0].team)
+		for row in rows:
+			row.place = 0 if int(row.team) == team_win else 1
+		print_verbose("[hw] párbaj-döntetlen: a kocka a(z) %d. oldalnak kedvezett" % team_win)
+		_highway_duel()
+		_celebrate()
+		_notify_waiting()
 
 	## A jobb oldali színpad: minden valódi résztvevő a helyezése szerinti magasságú talapzaton,
 	## helyezési sorrendben. Győztes: ugrál, karját a magasba emeli, nevet. Utolsó: lehajtott fej,
@@ -1202,6 +1218,13 @@ class ResultScene:
 				rows.append({"p": p, "place": place, "award": award, "label": byp.get(p.pid, {"label": ""}).label, "team": ti})
 		rows.sort_custom(func(a, b): return a.place < b.place)
 		if G.is_highway() and G.hw_duel_now and not G.mg_test:
+			if team_win == -1 and teams[0].size() == 1 and teams[1].size() == 1:
+				# kettes párbajban döntetlen: kockadobás dönt
+				duel_tie = true
+				for i in rows.size():
+					rows[i]["ord"] = i
+				if _tie_start():
+					return
 			_highway_duel()
 			return
 		for row in rows:
@@ -1264,7 +1287,11 @@ class ResultScene:
 		if stage == "tie":
 			_draw_tie(c)
 			return
-		if team_win >= 0:
+		if team_win >= 0 and G.is_highway() and G.hw_duel_now and not G.mg_test:
+			var solo_won: bool = teams[team_win].any(func(p): return p.pid == G.hw_duel)
+			var wtxt: String = ("%s NYERT!" % teams[team_win][0].name.to_upper()) if solo_won else ("AZ ELLENFELEK NYERTEK!" if teams[team_win].size() > 1 else "%s NYERT!" % teams[team_win][0].name.to_upper())
+			D.text(c, "⚔️ " + wtxt, 640, 122, {"size": 32, "color": MgFlow.TEAM_COLORS[team_win].lightened(0.35), "stroke": D.DARK, "sw": 6})
+		elif team_win >= 0:
 			D.text(c, "%s CSAPAT NYERT!" % MgFlow.TEAM_NAMES[team_win], 640, 122, {"size": 32, "color": MgFlow.TEAM_COLORS[team_win].lightened(0.35), "stroke": D.DARK, "sw": 6})
 		elif team_win == -1:
 			D.text(c, "DÖNTETLEN!", 640, 122, {"size": 32, "color": Color("#ffd43b")})
